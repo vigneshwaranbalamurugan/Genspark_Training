@@ -1,0 +1,529 @@
+
+    public OperatorLoginResponse OperatorLogin(OperatorLoginRequest request)
+    {
+        var email = NormalizeEmail(request.Email);
+        using var connection = OpenConnection();
+        using var command = new NpgsqlCommand(@"
+            SELECT id, company_name, email, approval_status, is_disabled, password_hash
+            FROM operators
+            WHERE email = @email;", connection);
+        command.Parameters.AddWithValue("email", email);
+
+        using var reader = command.ExecuteReader();
+        if (!reader.Read())
+        {
+            throw new KeyNotFoundException("Operator not found. Please register first.");
+        }
+
+        var operatorId = reader.GetGuid(reader.GetOrdinal("id"));
+        var companyName = reader.GetString(reader.GetOrdinal("company_name"));
+        var approvalStatus = reader.GetString(reader.GetOrdinal("approval_status"));
+        var isDisabled = reader.GetBoolean(reader.GetOrdinal("is_disabled"));
+        var passwordHash = reader.GetString(reader.GetOrdinal("password_hash"));
+        reader.Close();
+
+        if (approvalStatus != OperatorApprovalStatus.Approved.ToString())
+        {
+            throw new InvalidOperationException("Operator account not approved by admin yet.");
+        }
+
+        if (isDisabled)
+        {
+            throw new InvalidOperationException("Operator account is disabled.");
+        }
+
+        var verificationResult = passwordHasher.VerifyHashedPassword(email, passwordHash);
+        if (verificationResult == PasswordVerificationResult.Failed)
+        {
+            throw new InvalidOperationException("Invalid password.");
+        }
+
+        var jwtToken = GenerateJwtToken(operatorId, email);
+
+        return new OperatorLoginResponse
+        {
+            OperatorId = operatorId,
+            CompanyName = companyName,
+            Email = email,
+            JwtToken = jwtToken,
+            ApprovalStatus = ParseApprovalStatus(approvalStatus),
+            IsDisabled = isDisabled,
+            Message = "Login successful"
+        };
+    }
+
+    public BusWithNumberResponse AddBusWithNumber(Guid operatorId, BusRegistrationRequest request)
+    {
+        using var connection = OpenConnection();
+        
+        using (var existsCommand = new NpgsqlCommand(
+            "SELECT 1 FROM buses WHERE bus_number = @bus_number;", connection))
+        {
+            existsCommand.Parameters.AddWithValue("bus_number", request.BusNumber.Trim());
+            if (existsCommand.ExecuteScalar() is not null)
+            {
+                throw new InvalidOperationException("Bus number already exists. Bus numbers must be unique.");
+            }
+        }
+
+        var busId = Guid.NewGuid();
+        using var insertCommand = new NpgsqlCommand(@"
+            INSERT INTO buses
+            (id, operator_id, bus_name, capacity, bus_number, layout_name, layout_json, is_temporarily_unavailable, is_approved, is_active, created_at)
+            VALUES
+            (@id, @operator_id, @bus_name, @capacity, @bus_number, @layout_name, @layout_json, FALSE, FALSE, TRUE, @created_at);", connection);
+
+        insertCommand.Parameters.AddWithValue("id", busId);
+        insertCommand.Parameters.AddWithValue("operator_id", operatorId);
+        insertCommand.Parameters.AddWithValue("bus_name", request.BusName.Trim());
+        insertCommand.Parameters.AddWithValue("capacity", request.Capacity);
+        insertCommand.Parameters.AddWithValue("bus_number", request.BusNumber.Trim());
+        insertCommand.Parameters.AddWithValue("layout_name", request.LayoutName.Trim());
+        insertCommand.Parameters.AddWithValue("layout_json", request.LayoutJson ?? (object)DBNull.Value);
+        insertCommand.Parameters.AddWithValue("created_at", DateTime.UtcNow);
+        insertCommand.ExecuteNonQuery();
+
+        CreateNotification(connection, null, "admin@system.com", "Bus registration pending",
+            $"New bus '{request.BusName}' ({request.BusNumber}) registered by operator. Awaiting approval.");
+
+        return new BusWithNumberResponse
+        {
+            BusId = busId,
+            BusNumber = request.BusNumber.Trim(),
+            BusName = request.BusName.Trim(),
+            Capacity = request.Capacity,
+            LayoutName = request.LayoutName.Trim(),
+            IsApproved = false,
+            IsTemporarilyUnavailable = false,
+            IsActive = true
+        };
+    }
+
+    public IEnumerable<OperatorBookingView> GetOperatorBookings(Guid operatorId, Guid? busId = null)
+    {
+        using var connection = OpenConnection();
+        string sql = @"
+            SELECT b.id, b.pnr, b.trip_id, b.seat_numbers, b.total_amount, b.payment_status, b.is_cancelled,
+                   t.departure_time, bus.bus_name, bus.bus_number, r.source, r.destination, bp.name, bp.age, bp.gender, bp.seat_number
+            FROM bookings b
+            JOIN trips t ON t.id = b.trip_id
+            JOIN buses bus ON bus.id = t.bus_id
+            JOIN routes r ON r.id = t.route_id
+            JOIN booking_passengers bp ON bp.booking_id = b.id
+            WHERE t.operator_id = @operator_id";
+
+        if (busId.HasValue)
+        {
+            sql += " AND bus.id = @bus_id";
+        }
+
+        sql += " ORDER BY b.created_at DESC;";
+
+        using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("operator_id", operatorId);
+        if (busId.HasValue)
+        {
+            command.Parameters.AddWithValue("bus_id", busId.Value);
+        }
+
+        using var reader = command.ExecuteReader();
+        var bookingsDict = new Dictionary<Guid, OperatorBookingView>();
+
+        while (reader.Read())
+        {
+            var bookingId = reader.GetGuid(reader.GetOrdinal("id"));
+            if (!bookingsDict.TryGetValue(bookingId, out var booking))
+            {
+                booking = new OperatorBookingView
+                {
+                    BookingId = bookingId,
+                    Pnr = reader.GetString(reader.GetOrdinal("pnr")),
+                    TripId = reader.GetGuid(reader.GetOrdinal("trip_id")),
+                    BusName = reader.GetString(reader.GetOrdinal("bus_name")),
+                    BusNumber = reader.GetString(reader.GetOrdinal("bus_number")),
+                    Route = $"{reader.GetString(reader.GetOrdinal("source"))} → {reader.GetString(reader.GetOrdinal("destination"))}",
+                    DepartureTime = reader.GetDateTime(reader.GetOrdinal("departure_time")),
+                    SeatNumbers = reader.GetFieldValue<int[]>(reader.GetOrdinal("seat_numbers")).ToList(),
+                    TotalAmount = reader.GetDecimal(reader.GetOrdinal("total_amount")),
+                    PaymentStatus = reader.GetString(reader.GetOrdinal("payment_status")),
+                    IsCancelled = reader.GetBoolean(reader.GetOrdinal("is_cancelled"))
+                };
+                bookingsDict[bookingId] = booking;
+            }
+
+            booking.Passengers.Add(new BookingPassenger
+            {
+                Name = reader.GetString(reader.GetOrdinal("name")),
+                Age = reader.GetInt32(reader.GetOrdinal("age")),
+                Gender = reader.GetString(reader.GetOrdinal("gender")),
+                SeatNumber = reader.GetInt32(reader.GetOrdinal("seat_number"))
+            });
+        }
+
+        return bookingsDict.Values;
+    }
+
+    public OperatorRevenueResponse GetOperatorRevenue(Guid operatorId)
+    {
+        using var connection = OpenConnection();
+        
+        decimal totalRevenue = 0, revenuePastMonth = 0, revenueThisMonth = 0;
+        int totalBookings = 0, activeTrips = 0;
+        
+        using (var revenueCommand = new NpgsqlCommand(@"
+            SELECT 
+                SUM(b.total_amount) as total_revenue,
+                COUNT(b.id) as total_bookings
+            FROM bookings b
+            JOIN trips t ON t.id = b.trip_id
+            WHERE t.operator_id = @operator_id AND b.is_cancelled = FALSE;", connection))
+        {
+            revenueCommand.Parameters.AddWithValue("operator_id", operatorId);
+            using var reader = revenueCommand.ExecuteReader();
+            if (reader.Read())
+            {
+                totalRevenue = reader.IsDBNull(0) ? 0 : reader.GetDecimal(0);
+                totalBookings = reader.IsDBNull(1) ? 0 : reader.GetInt32(1);
+            }
+        }
+
+        var now = DateTime.UtcNow;
+        var monthStart = new DateTime(now.Year, now.Month, 1);
+        var pastMonthStart = monthStart.AddMonths(-1);
+
+        using (var monthCommand = new NpgsqlCommand(@"
+            SELECT 
+                SUM(CASE WHEN b.created_at >= @month_start THEN b.total_amount ELSE 0 END) as this_month,
+                SUM(CASE WHEN b.created_at >= @past_month_start AND b.created_at < @month_start THEN b.total_amount ELSE 0 END) as past_month
+            FROM bookings b
+            JOIN trips t ON t.id = b.trip_id
+            WHERE t.operator_id = @operator_id AND b.is_cancelled = FALSE;", connection))
+        {
+            monthCommand.Parameters.AddWithValue("operator_id", operatorId);
+            monthCommand.Parameters.AddWithValue("month_start", monthStart);
+            monthCommand.Parameters.AddWithValue("past_month_start", pastMonthStart);
+            using var reader = monthCommand.ExecuteReader();
+            if (reader.Read())
+            {
+                revenueThisMonth = reader.IsDBNull(0) ? 0 : reader.GetDecimal(0);
+                revenuePastMonth = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1);
+            }
+        }
+
+        using (var tripsCommand = new NpgsqlCommand(@"
+            SELECT COUNT(*) FROM trips
+            WHERE operator_id = @operator_id AND is_active = TRUE AND departure_time > @now;", connection))
+        {
+            tripsCommand.Parameters.AddWithValue("operator_id", operatorId);
+            tripsCommand.Parameters.AddWithValue("now", now);
+            activeTrips = Convert.ToInt32(tripsCommand.ExecuteScalar());
+        }
+
+        using (var busesCommand = new NpgsqlCommand(@"
+            SELECT COUNT(*) FROM buses
+            WHERE operator_id = @operator_id AND is_active = TRUE;", connection))
+        {
+            busesCommand.Parameters.AddWithValue("operator_id", operatorId);
+            var activeBuses = Convert.ToInt32(busesCommand.ExecuteScalar());
+        }
+
+        var busRevenue = new List<BusRevenueDetail>();
+        using (var busRevenueCommand = new NpgsqlCommand(@"
+            SELECT 
+                b.id, b.bus_name, b.bus_number,
+                SUM(bk.total_amount) as revenue,
+                COUNT(bk.id) as bookings
+            FROM buses b
+            LEFT JOIN trips t ON t.bus_id = b.id
+            LEFT JOIN bookings bk ON bk.trip_id = t.id AND bk.is_cancelled = FALSE
+            WHERE b.operator_id = @operator_id
+            GROUP BY b.id, b.bus_name, b.bus_number;", connection))
+        {
+            busRevenueCommand.Parameters.AddWithValue("operator_id", operatorId);
+            using var reader = busRevenueCommand.ExecuteReader();
+            while (reader.Read())
+            {
+                busRevenue.Add(new BusRevenueDetail
+                {
+                    BusId = reader.GetGuid(0),
+                    BusName = reader.GetString(1),
+                    BusNumber = reader.GetString(2),
+                    Revenue = reader.IsDBNull(3) ? 0 : reader.GetDecimal(3),
+                    Bookings = reader.IsDBNull(4) ? 0 : reader.GetInt32(4)
+                });
+            }
+        }
+
+        return new OperatorRevenueResponse
+        {
+            OperatorId = operatorId,
+            TotalRevenue = totalRevenue,
+            RevenuePastMonth = revenuePastMonth,
+            RevenueThisMonth = revenueThisMonth,
+            TotalBookings = totalBookings,
+            ActiveBuses = busRevenue.Count,
+            ActiveTrips = activeTrips,
+            BusRevenue = busRevenue
+        };
+    }
+
+    public PreferredRouteResponse AddPreferredRoute(Guid operatorId, PreferredRouteRequest request)
+    {
+        using var connection = OpenConnection();
+        
+        using (var existsCommand = new NpgsqlCommand(
+            "SELECT 1 FROM operator_preferred_routes WHERE operator_id = @operator_id AND route_id = @route_id;", connection))
+        {
+            existsCommand.Parameters.AddWithValue("operator_id", operatorId);
+            existsCommand.Parameters.AddWithValue("route_id", request.RouteId);
+            if (existsCommand.ExecuteScalar() is not null)
+            {
+                throw new InvalidOperationException("Route already in preferred list.");
+            }
+        }
+
+        using var insertCommand = new NpgsqlCommand(@"
+            INSERT INTO operator_preferred_routes (id, operator_id, route_id, created_at)
+            VALUES (@id, @operator_id, @route_id, @created_at);", connection);
+        insertCommand.Parameters.AddWithValue("id", Guid.NewGuid());
+        insertCommand.Parameters.AddWithValue("operator_id", operatorId);
+        insertCommand.Parameters.AddWithValue("route_id", request.RouteId);
+        insertCommand.Parameters.AddWithValue("created_at", DateTime.UtcNow);
+        insertCommand.ExecuteNonQuery();
+
+        var route = GetRoute(connection, request.RouteId);
+        return new PreferredRouteResponse
+        {
+            RouteId = route.RouteId,
+            Source = route.Source,
+            Destination = route.Destination
+        };
+    }
+
+    public IEnumerable<PreferredRouteResponse> GetOperatorPreferredRoutes(Guid operatorId)
+    {
+        using var connection = OpenConnection();
+        using var command = new NpgsqlCommand(@"
+            SELECT r.id, r.source, r.destination
+            FROM routes r
+            JOIN operator_preferred_routes opr ON opr.route_id = r.id
+            WHERE opr.operator_id = @operator_id;", connection);
+        command.Parameters.AddWithValue("operator_id", operatorId);
+
+        using var reader = command.ExecuteReader();
+        var routes = new List<PreferredRouteResponse>();
+        while (reader.Read())
+        {
+            routes.Add(new PreferredRouteResponse
+            {
+                RouteId = reader.GetGuid(0),
+                Source = reader.GetString(1),
+                Destination = reader.GetString(2)
+            });
+        }
+        return routes;
+    }
+
+    public PickupDropPointResponse AddPickupDropPoint(Guid operatorId, Guid routeId, bool isPickup, PickupDropPointRequest request)
+    {
+        using var connection = OpenConnection();
+        var pointId = Guid.NewGuid();
+        
+        using var insertCommand = new NpgsqlCommand(@"
+            INSERT INTO pickup_drop_points (id, operator_id, route_id, is_pickup, location, address, is_default, created_at)
+            VALUES (@id, @operator_id, @route_id, @is_pickup, @location, @address, @is_default, @created_at);", connection);
+        insertCommand.Parameters.AddWithValue("id", pointId);
+        insertCommand.Parameters.AddWithValue("operator_id", operatorId);
+        insertCommand.Parameters.AddWithValue("route_id", routeId);
+        insertCommand.Parameters.AddWithValue("is_pickup", isPickup);
+        insertCommand.Parameters.AddWithValue("location", request.Location.Trim());
+        insertCommand.Parameters.AddWithValue("address", request.Address ?? (object)DBNull.Value);
+        insertCommand.Parameters.AddWithValue("is_default", request.IsDefault);
+        insertCommand.Parameters.AddWithValue("created_at", DateTime.UtcNow);
+        insertCommand.ExecuteNonQuery();
+
+        return new PickupDropPointResponse
+        {
+            PointId = pointId,
+            Location = request.Location.Trim(),
+            Address = request.Address,
+            IsDefault = request.IsDefault
+        };
+    }
+
+    public IEnumerable<PickupDropPointResponse> GetPickupDropPoints(Guid operatorId, Guid routeId, bool isPickup)
+    {
+        using var connection = OpenConnection();
+        using var command = new NpgsqlCommand(@"
+            SELECT id, location, address, is_default
+            FROM pickup_drop_points
+            WHERE operator_id = @operator_id AND route_id = @route_id AND is_pickup = @is_pickup;", connection);
+        command.Parameters.AddWithValue("operator_id", operatorId);
+        command.Parameters.AddWithValue("route_id", routeId);
+        command.Parameters.AddWithValue("is_pickup", isPickup);
+
+        using var reader = command.ExecuteReader();
+        var points = new List<PickupDropPointResponse>();
+        while (reader.Read())
+        {
+            points.Add(new PickupDropPointResponse
+            {
+                PointId = reader.GetGuid(0),
+                Location = reader.GetString(1),
+                Address = reader.IsDBNull(2) ? null : reader.GetString(2),
+                IsDefault = reader.GetBoolean(3)
+            });
+        }
+        return points;
+    }
+
+    public TripSummary AddTripWithDetails(Guid operatorId, TripCreateRequestWithDetails request)
+    {
+        DeleteExpiredLocks();
+
+        using var connection = OpenConnection();
+        var operatorData = GetOperator(connection, operatorId);
+        
+        if (operatorData.ApprovalStatus != OperatorApprovalStatus.Approved.ToString())
+        {
+            throw new InvalidOperationException("Operator not approved.");
+        }
+
+        var busRecord = GetBus(connection, request.BusId);
+        if (busRecord.OperatorId != operatorId || !busRecord.IsApproved || !busRecord.IsActive)
+        {
+            throw new InvalidOperationException("Bus not valid or not approved.");
+        }
+
+        var route = GetRoute(connection, request.RouteId);
+
+        var tripId = Guid.NewGuid();
+        var platformFee = GetCurrentPlatformFeeAmount(connection);
+
+        using var insertCommand = new NpgsqlCommand(@"
+            INSERT INTO trips
+            (id, operator_id, bus_id, route_id, departure_time, arrival_time, base_price, platform_fee, is_variable_price, pickup_points, drop_points, is_active, created_at)
+            VALUES
+            (@id, @operator_id, @bus_id, @route_id, @departure_time, @arrival_time, @base_price, @platform_fee, FALSE, @pickup_points, @drop_points, TRUE, @created_at);", connection);
+
+        insertCommand.Parameters.AddWithValue("id", tripId);
+        insertCommand.Parameters.AddWithValue("operator_id", operatorId);
+        insertCommand.Parameters.AddWithValue("bus_id", request.BusId);
+        insertCommand.Parameters.AddWithValue("route_id", request.RouteId);
+        insertCommand.Parameters.AddWithValue("departure_time", request.DepartureTime);
+        insertCommand.Parameters.AddWithValue("arrival_time", request.ArrivalTime);
+        insertCommand.Parameters.AddWithValue("base_price", request.BasePrice);
+        insertCommand.Parameters.AddWithValue("platform_fee", platformFee);
+        insertCommand.Parameters.AddWithValue("pickup_points", request.PickupPoints ?? (object)DBNull.Value);
+        insertCommand.Parameters.AddWithValue("drop_points", request.DropPoints ?? (object)DBNull.Value);
+        insertCommand.Parameters.AddWithValue("created_at", DateTime.UtcNow);
+        insertCommand.ExecuteNonQuery();
+
+        return new TripSummary
+        {
+            TripId = tripId,
+            BusId = request.BusId,
+            BusName = busRecord.BusName,
+            Source = route.Source,
+            Destination = route.Destination,
+            DepartureTime = request.DepartureTime,
+            ArrivalTime = request.ArrivalTime,
+            Capacity = busRecord.Capacity,
+            SeatsAvailable = busRecord.Capacity,
+            BasePrice = request.BasePrice,
+            PlatformFee = platformFee,
+            IsVariablePrice = false
+        };
+    }
+
+    public void RequestBusDisable(Guid operatorId, Guid busId, string reason)
+    {
+        using var connection = OpenConnection();
+        var busRecord = GetBus(connection, busId);
+        
+        if (busRecord.OperatorId != operatorId)
+        {
+            throw new InvalidOperationException("Bus does not belong to this operator.");
+        }
+
+        CreateNotification(connection, null, "admin@system.com", "Bus disable request",
+            $"Operator requested to disable bus '{busRecord.BusName}'. Reason: {reason}");
+    }
+
+    public PlatformFeeResponse SetPlatformFee(PlatformFeeRequest request)
+    {
+        using var connection = OpenConnection();
+        using var transaction = connection.BeginTransaction();
+
+        using (var archiveCommand = new NpgsqlCommand(
+            "UPDATE platform_fees SET is_active = FALSE WHERE is_active = TRUE;", connection, transaction))
+        {
+            archiveCommand.ExecuteNonQuery();
+        }
+
+        var feeId = Guid.NewGuid();
+        using var insertCommand = new NpgsqlCommand(@"
+            INSERT INTO platform_fees (id, amount, description, is_active, created_at)
+            VALUES (@id, @amount, @description, TRUE, @created_at);", connection, transaction);
+        insertCommand.Parameters.AddWithValue("id", feeId);
+        insertCommand.Parameters.AddWithValue("amount", request.FeeAmount);
+        insertCommand.Parameters.AddWithValue("description", request.Description ?? (object)DBNull.Value);
+        insertCommand.Parameters.AddWithValue("created_at", DateTime.UtcNow);
+        insertCommand.ExecuteNonQuery();
+
+        transaction.Commit();
+
+        CreateNotification(connection, null, "admin@system.com", "Platform fee updated",
+            $"New platform fee set: {request.FeeAmount}");
+
+        return new PlatformFeeResponse
+        {
+            FeeId = feeId,
+            Amount = request.FeeAmount,
+            Description = request.Description ?? string.Empty,
+            UpdatedAt = DateTime.UtcNow
+        };
+    }
+
+    public PlatformFeeResponse GetCurrentPlatformFee()
+    {
+        using var connection = OpenConnection();
+        using var command = new NpgsqlCommand(@"
+            SELECT id, amount, description, created_at
+            FROM platform_fees
+            WHERE is_active = TRUE
+            ORDER BY created_at DESC
+            LIMIT 1;", connection);
+
+        using var reader = command.ExecuteReader();
+        if (!reader.Read())
+        {
+            return new PlatformFeeResponse
+            {
+                FeeId = Guid.Empty,
+                Amount = 0,
+                Description = "No fee configured",
+                UpdatedAt = DateTime.UtcNow
+            };
+        }
+
+        return new PlatformFeeResponse
+        {
+            FeeId = reader.GetGuid(0),
+            Amount = reader.GetDecimal(1),
+            Description = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+            UpdatedAt = reader.GetDateTime(3)
+        };
+    }
+
+    private decimal GetCurrentPlatformFeeAmount(NpgsqlConnection connection)
+    {
+        using var command = new NpgsqlCommand(@"
+            SELECT amount FROM platform_fees
+            WHERE is_active = TRUE
+            ORDER BY created_at DESC
+            LIMIT 1;", connection);
+        
+        var result = command.ExecuteScalar();
+        return result != null && result != DBNull.Value ? Convert.ToDecimal(result) : 0m;
+    }

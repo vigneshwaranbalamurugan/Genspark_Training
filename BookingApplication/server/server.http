@@ -1,0 +1,135 @@
+@server_HostAddress = http://localhost:5226
+
+### Public search (before login)
+GET {{server_HostAddress}}/api/public/buses/search?source=Chennai&destination=Bangalore&date=2026-04-23
+
+### Seat availability
+GET {{server_HostAddress}}/api/public/trips/{{tripId}}/seats
+
+### Lock seats for 5 minutes
+POST {{server_HostAddress}}/api/bookings/lock-seats
+Content-Type: application/json
+
+{
+	"tripId": "{{tripId}}",
+	"userEmail": "user@example.com",
+	"seatNumbers": [1, 2]
+}
+
+### Create booking (dummy payment)
+POST {{server_HostAddress}}/api/bookings
+Content-Type: application/json
+
+{
+	"lockId": "{{lockId}}",
+	"userEmail": "user@example.com",
+	"paymentMode": "Dummy",
+	"passengers": [
+		{ "name": "John", "age": 28, "gender": "Male" },
+		{ "name": "Jane", "age": 26, "gender": "Female" }
+	]
+}
+
+### Booking history
+GET {{server_HostAddress}}/api/bookings/history/user@example.com
+
+### Cancel booking (12 hours rule, 20% refund)
+POST {{server_HostAddress}}/api/bookings/{{bookingId}}/cancel?userEmail=user@example.com
+
+### Upsert profile (SSO field optional)
+POST {{server_HostAddress}}/api/profile
+Content-Type: application/json
+
+{
+	"email": "user@example.com",
+	"fullName": "John Doe",
+	"ssoProvider": "Google"
+}
+
+### Register operator
+POST {{server_HostAddress}}/api/operator/register
+Content-Type: application/json
+
+{
+	"companyName": "ACME Travels",
+	"email": "ops@acme.com",
+	"password": "Password@123"
+}
+
+### Admin list operators
+GET {{server_HostAddress}}/api/admin/operators
+
+### Admin approve operator
+POST {{server_HostAddress}}/api/admin/operators/{{operatorId}}/approval
+Content-Type: application/json
+
+{
+	"approve": true,
+	"comment": "Approved"
+}
+
+### Admin add route
+POST {{server_HostAddress}}/api/admin/routes
+Content-Type: application/json
+
+{
+	"source": "Chennai",
+	"destination": "Coimbatore"
+}
+
+### Operator add bus
+POST {{server_HostAddress}}/api/operator/buses
+Content-Type: application/json
+
+{
+	"operatorId": "{{operatorId}}",
+	"busName": "ACME 2+2",
+	"capacity": 40,
+	"layoutName": "2+2",
+	"layoutJson": "{\"rows\":10,\"columns\":4}"
+}
+
+### Admin approve bus
+POST {{server_HostAddress}}/api/admin/buses/{{busId}}/approval
+Content-Type: application/json
+
+{
+	"approve": true,
+	"comment": "Bus verified"
+}
+
+### Operator add trip
+POST {{server_HostAddress}}/api/operator/trips
+Content-Type: application/json
+
+{
+	"operatorId": "{{operatorId}}",
+	"busId": "{{busId}}",
+	"routeId": "{{routeId}}",
+	"departureTime": "2026-04-24T21:00:00Z",
+	"arrivalTime": "2026-04-25T06:00:00Z",
+	"basePrice": 900,
+	"platformFee": 35,
+	"isVariablePrice": true,
+	"pickupPoints": "Koyambedu,Perungalathur",
+	"dropPoints": "Madiwala,Majestic"
+}
+
+### Operator dashboard
+GET {{server_HostAddress}}/api/operator/{{operatorId}}/dashboard
+
+### Admin disable operator with reason
+POST {{server_HostAddress}}/api/admin/operators/{{operatorId}}/disable
+Content-Type: application/json
+
+{
+	"reason": "Repeated policy violation"
+}
+
+### Notification history for user/operator
+GET {{server_HostAddress}}/api/admin/notifications/user@example.com
+
+GET {{server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
