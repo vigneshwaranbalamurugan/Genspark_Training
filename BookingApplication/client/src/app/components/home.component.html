@@ -1,0 +1,185 @@
+<div class="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(0,86,179,0.10),_transparent_30%),radial-gradient(circle_at_top_right,_rgba(255,102,0,0.14),_transparent_28%),linear-gradient(180deg,#ffffff_0%,#f8fbff_52%,#f2f2f2_100%)] text-gray-900">
+  <header class="sticky top-0 z-30 border-b border-white/60 bg-white/80 backdrop-blur-xl shadow-sm">
+    <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+      <div>
+        <p class="text-xs uppercase tracking-[0.35em] text-blue-700">BookingApp</p>
+        <h1 class="text-xl font-extrabold sm:text-2xl">Bus booking made simple</h1>
+      </div>
+      <div class="flex items-center gap-3">
+        @if (currentUser) {
+          <a routerLink="/dashboard" class="rounded-full border border-blue-600 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Dashboard</a>
+        } @else {
+          <a routerLink="/login" class="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Login</a>
+          <a routerLink="/register" class="rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700">Register</a>
+        }
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <section class="grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
+      <div class="space-y-6">
+        <span class="inline-flex rounded-full bg-blue-100 px-4 py-1 text-sm font-semibold text-blue-700">Public search is open to everyone</span>
+        <div class="space-y-4">
+          <h2 class="max-w-2xl text-4xl font-black tracking-tight sm:text-5xl">Search buses instantly, book only after login.</h2>
+          <p class="max-w-2xl text-lg text-slate-600">Use fuzzy route search, choose seats with live layout colors, lock seats briefly while you pay, and download tickets after confirmation.</p>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-3">
+          <div class="rounded-2xl bg-white p-4 shadow-lg shadow-slate-200/70">
+            <p class="text-sm text-slate-500">Source / Destination</p>
+            <p class="mt-1 font-semibold">Fuzzy matching</p>
+          </div>
+          <div class="rounded-2xl bg-white p-4 shadow-lg shadow-slate-200/70">
+            <p class="text-sm text-slate-500">Seat Layout</p>
+            <p class="mt-1 font-semibold">Ladies in pink</p>
+          </div>
+          <div class="rounded-2xl bg-white p-4 shadow-lg shadow-slate-200/70">
+            <p class="text-sm text-slate-500">Payment</p>
+            <p class="mt-1 font-semibold">Dummy or Razorpay</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-[2rem] border border-white/70 bg-white/85 p-6 shadow-2xl shadow-slate-300/40 backdrop-blur-xl">
+        <h3 class="text-2xl font-bold">Find your trip</h3>
+        <p class="mt-1 text-sm text-slate-600">Search by route and date. Round trips are optional.</p>
+
+        <form class="mt-6 space-y-4" [formGroup]="searchForm" (ngSubmit)="search()">
+          <div class="grid gap-4 sm:grid-cols-2">
+            <label class="space-y-2 text-sm font-semibold text-slate-700">
+              <span>Source</span>
+              <input formControlName="source" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-blue-500 focus:bg-white" placeholder="e.g. Chennai" />
+            </label>
+            <label class="space-y-2 text-sm font-semibold text-slate-700">
+              <span>Destination</span>
+              <input formControlName="destination" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-blue-500 focus:bg-white" placeholder="e.g. Bangalore" />
+            </label>
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <label class="space-y-2 text-sm font-semibold text-slate-700">
+              <span>Journey Date</span>
+              <input type="date" formControlName="date" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-blue-500 focus:bg-white" />
+            </label>
+            <label class="space-y-2 text-sm font-semibold text-slate-700">
+              <span>Return Date</span>
+              <input type="date" formControlName="returnDate" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-blue-500 focus:bg-white" />
+            </label>
+          </div>
+          <button type="submit" class="w-full rounded-2xl bg-orange-500 px-5 py-3 text-base font-bold text-white shadow-lg shadow-orange-500/20 transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60" [disabled]="loading()">
+            @if (loading()) { Searching... } @else { Search buses }
+          </button>
+          @if (errorMessage()) {
+            <div class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ errorMessage() }}</div>
+          }
+        </form>
+      </div>
+    </section>
+
+    @if (searchResult()) {
+      <section class="mt-10 space-y-6">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="text-2xl font-bold">Search results</h3>
+            <p class="text-slate-600">{{ totalTrips }} trip(s) found</p>
+          </div>
+          <button class="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100" (click)="clearResults()">Clear</button>
+        </div>
+
+        <div class="grid gap-5">
+          @for (trip of searchResult()?.outboundTrips ?? []; track trip.tripId) {
+            <article class="rounded-[1.75rem] border border-white bg-white/90 p-5 shadow-xl shadow-slate-200/70 transition hover:-translate-y-0.5 hover:shadow-2xl">
+              <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <div class="flex flex-wrap items-center gap-3">
+                    <h4 class="text-xl font-bold">{{ trip.busName }}</h4>
+                    <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">{{ trip.seatsAvailable }} seats left</span>
+                    <span class="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">{{ trip.isVariablePrice ? 'Dynamic price' : 'Fixed price' }}</span>
+                  </div>
+                  <p class="mt-2 text-slate-600">{{ trip.source }} → {{ trip.destination }}</p>
+                  <p class="mt-1 text-sm text-slate-500">Depart {{ trip.departureTime | date:'short' }} | Arrive {{ trip.arrivalTime | date:'short' }}</p>
+                </div>
+                <div class="flex flex-col gap-3 sm:flex-row">
+                  <button class="rounded-2xl border border-slate-300 px-4 py-3 font-semibold text-slate-700 hover:bg-slate-100" (click)="toggleTrip(trip.tripId)">
+                    {{ expandedTripId() === trip.tripId ? 'Hide' : 'Seat info' }}
+                  </button>
+                  <button class="rounded-2xl bg-blue-600 px-5 py-3 font-bold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700" (click)="bookTrip(trip)">
+                    Book now
+                  </button>
+                </div>
+              </div>
+
+              @if (expandedTripId() === trip.tripId) {
+                <div class="mt-5 grid gap-4 rounded-2xl bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <p class="text-xs uppercase tracking-wide text-slate-500">Bus capacity</p>
+                    <p class="mt-1 text-lg font-semibold">{{ trip.capacity }}</p>
+                  </div>
+                  <div>
+                    <p class="text-xs uppercase tracking-wide text-slate-500">Travel time</p>
+                    <p class="mt-1 text-lg font-semibold">{{ trip.departureTime | date:'shortTime' }} - {{ trip.arrivalTime | date:'shortTime' }}</p>
+                  </div>
+                  <div>
+                    <p class="text-xs uppercase tracking-wide text-slate-500">Base price</p>
+                    <p class="mt-1 text-lg font-semibold">₹{{ trip.basePrice }}</p>
+                  </div>
+                  <div>
+                    <p class="text-xs uppercase tracking-wide text-slate-500">Platform fee</p>
+                    <p class="mt-1 text-lg font-semibold">₹{{ trip.platformFee }}</p>
+                  </div>
+                </div>
+              }
+            </article>
+          }
+        </div>
+
+        @if ((searchResult()?.returnTrips?.length || 0) > 0) {
+          <div class="rounded-[1.75rem] bg-white p-6 shadow-xl shadow-slate-200/70">
+            <h4 class="text-xl font-bold">Return Trips</h4>
+            <div class="mt-4 grid gap-4">
+              @for (trip of searchResult()?.returnTrips ?? []; track trip.tripId) {
+                <div class="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p class="font-semibold">{{ trip.busName }}</p>
+                    <p class="text-sm text-slate-600">{{ trip.source }} → {{ trip.destination }} | {{ trip.departureTime | date:'short' }}</p>
+                  </div>
+                  <button class="rounded-2xl bg-orange-500 px-4 py-2 font-semibold text-white hover:bg-orange-600" (click)="bookTrip(trip)">Book return</button>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </section>
+    }
+
+    <section class="mt-12 grid gap-4 md:grid-cols-3">
+      <a routerLink="/dashboard" class="rounded-[1.5rem] bg-slate-900 p-6 text-white shadow-xl shadow-slate-900/10 transition hover:-translate-y-0.5">
+        <p class="text-sm uppercase tracking-[0.3em] text-slate-400">Logged-in users</p>
+        <h3 class="mt-2 text-2xl font-bold">Dashboard</h3>
+        <p class="mt-2 text-sm text-slate-300">View bookings, profile, and account details.</p>
+      </a>
+      <a routerLink="/history" class="rounded-[1.5rem] bg-white p-6 shadow-xl shadow-slate-200/70 transition hover:-translate-y-0.5">
+        <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Bookings</p>
+        <h3 class="mt-2 text-2xl font-bold">History</h3>
+        <p class="mt-2 text-sm text-slate-600">Past, present, future, and cancelled bookings.</p>
+      </a>
+      <a routerLink="/profile" class="rounded-[1.5rem] bg-white p-6 shadow-xl shadow-slate-200/70 transition hover:-translate-y-0.5">
+        <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Profile</p>
+        <h3 class="mt-2 text-2xl font-bold">User profile</h3>
+        <p class="mt-2 text-sm text-slate-600">SSO/email-password support and saved traveler info.</p>
+      </a>
+    </section>
+
+    <section class="mt-4 grid gap-4 md:grid-cols-2">
+      <a routerLink="/operator/login" class="rounded-[1.5rem] bg-white p-6 shadow-xl shadow-slate-200/70 transition hover:-translate-y-0.5">
+        <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Operator</p>
+        <h3 class="mt-2 text-2xl font-bold">Operator Portal</h3>
+        <p class="mt-2 text-sm text-slate-600">Manage buses, preferred routes, pickup/drop points, fixed-price trips, and revenue.</p>
+      </a>
+      <a routerLink="/admin/login" class="rounded-[1.5rem] bg-white p-6 shadow-xl shadow-slate-200/70 transition hover:-translate-y-0.5">
+        <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Admin</p>
+        <h3 class="mt-2 text-2xl font-bold">Admin Portal</h3>
+        <p class="mt-2 text-sm text-slate-600">Approve operators and buses, control routes, and set platform fee.</p>
+      </a>
+    </section>
+  </main>
+</div>

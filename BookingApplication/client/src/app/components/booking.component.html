@@ -1,0 +1,149 @@
+<div class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 px-4 py-6 sm:px-6 lg:px-8">
+  <div class="mx-auto max-w-7xl space-y-6">
+    <div class="flex flex-wrap items-center justify-between gap-4 rounded-[1.75rem] bg-white p-6 shadow-xl shadow-slate-200/70">
+      <div>
+        <p class="text-xs uppercase tracking-[0.35em] text-blue-700">Seat booking</p>
+        <h1 class="text-3xl font-black text-slate-900">Book seats with live lock protection</h1>
+        <p class="mt-2 text-slate-600">Seat locks stay active for 5 minutes while you finish payment.</p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <a routerLink="/history" class="rounded-full border border-slate-300 px-4 py-2 font-semibold text-slate-700 hover:bg-slate-100">Booking history</a>
+        <a routerLink="/dashboard" class="rounded-full bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700">Dashboard</a>
+      </div>
+    </div>
+
+    @if (errorMessage()) {
+      <div class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-700">{{ errorMessage() }}</div>
+    }
+
+    @if (successMessage()) {
+      <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-700">{{ successMessage() }}</div>
+    }
+
+    <div class="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+      <section class="space-y-6">
+        <div class="rounded-[1.75rem] bg-white p-6 shadow-xl shadow-slate-200/70">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Trip details</p>
+              <h2 class="mt-1 text-2xl font-bold">{{ seatLayout()?.busName || 'Loading trip...' }}</h2>
+              <p class="text-slate-600">Layout: {{ seatLayout()?.layoutName || '-' }}</p>
+            </div>
+            <div class="rounded-2xl bg-blue-50 px-4 py-3 text-right">
+              <p class="text-xs uppercase tracking-wide text-blue-700">Seats left</p>
+              <p class="text-2xl font-black text-blue-700">{{ seatLayout()?.seatsAvailableLeft || 0 }}</p>
+            </div>
+          </div>
+
+          @if (loading()) {
+            <div class="mt-6 rounded-2xl bg-slate-50 p-6 text-center text-slate-500">Loading seat layout...</div>
+          } @else {
+            <div class="mt-6 grid gap-6 xl:grid-cols-[1fr_280px]">
+              <div>
+                <div class="grid grid-cols-4 gap-3 sm:grid-cols-6 lg:grid-cols-8">
+                  @for (seat of seatGrid; track seat.seatNumber) {
+                    <button
+                      type="button"
+                      class="seat-tile"
+                      [class.available]="seatState(seat) === 'available'"
+                      [class.selected]="seatState(seat) === 'selected'"
+                      [class.booked]="seatState(seat) === 'booked'"
+                      [class.female]="seatState(seat) === 'booked-female'"
+                      (click)="toggleSeat(seat.seatNumber)"
+                    >
+                      <span class="seat-label">{{ seatLabel(seat) }}</span>
+                    </button>
+                  }
+                </div>
+
+                <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div class="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">Available</div>
+                  <div class="rounded-2xl bg-blue-100 px-4 py-3 text-sm text-blue-800">Selected</div>
+                  <div class="rounded-2xl bg-slate-200 px-4 py-3 text-sm text-slate-700">Booked / locked</div>
+                  <div class="rounded-2xl bg-pink-100 px-4 py-3 text-sm text-pink-800">Women booked</div>
+                </div>
+              </div>
+
+              <aside class="space-y-4 rounded-[1.5rem] bg-slate-50 p-5">
+                <div>
+                  <p class="text-xs uppercase tracking-[0.3em] text-slate-500">Trip rules</p>
+                  <ul class="mt-3 space-y-2 text-sm text-slate-600">
+                    <li>• Login is required before locking seats.</li>
+                    <li>• Seats are reserved for 5 minutes after lock.</li>
+                    <li>• More than one seat is supported.</li>
+                    <li>• Cancellation is allowed before 12 hours of departure.</li>
+                    <li>• Female booked seats are highlighted in pink.</li>
+                  </ul>
+                </div>
+                <button class="w-full rounded-2xl bg-orange-500 px-4 py-3 font-bold text-white hover:bg-orange-600 disabled:opacity-60" type="button" (click)="lockSeats()" [disabled]="actionLoading()">
+                  @if (actionLoading()) { Locking... } @else { Lock selected seats }
+                </button>
+                @if (lockResponse()) {
+                  <div class="rounded-2xl bg-white p-4 text-sm text-slate-700">
+                    <p class="font-semibold text-slate-900">{{ lockResponse()?.message }}</p>
+                    <p class="mt-2">Lock expires at {{ lockResponse()?.lockExpiresAt | date:'shortTime' }}</p>
+                  </div>
+                }
+              </aside>
+            </div>
+          }
+        </div>
+      </section>
+
+      <section class="space-y-6">
+        <div class="rounded-[1.75rem] bg-white p-6 shadow-xl shadow-slate-200/70">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Traveler details</p>
+              <h2 class="text-2xl font-bold">Passenger forms</h2>
+            </div>
+            <div class="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">{{ selectedSeats().length }} seat(s)</div>
+          </div>
+
+          <form class="mt-5 space-y-4" [formGroup]="seatForm">
+            <div formArrayName="seats" class="space-y-4">
+              @for (seatControl of seatPassengerArray.controls; track $index; let i = $index) {
+                <div [formGroupName]="$index" class="rounded-2xl border border-slate-200 p-4">
+                  <p class="mb-3 text-sm font-semibold text-slate-700">Traveler for seat {{ selectedSeats()[$index] }}</p>
+                  <div class="grid gap-3 sm:grid-cols-3">
+                    <input formControlName="name" placeholder="Name" class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3" />
+                    <input formControlName="age" type="number" placeholder="Age" class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3" />
+                    <select formControlName="gender" class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <option value="Female">Female</option>
+                      <option value="Male">Male</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                </div>
+              }
+            </div>
+          </form>
+        </div>
+
+        <div class="rounded-[1.75rem] bg-white p-6 shadow-xl shadow-slate-200/70">
+          <p class="text-sm uppercase tracking-[0.3em] text-slate-500">Payment</p>
+          <h2 class="mt-1 text-2xl font-bold">Dummy / Razorpay mode</h2>
+          <p class="mt-2 text-slate-600">Use dummy payment for demo or switch to Razorpay simulation.</p>
+
+          <div class="mt-4 grid grid-cols-2 gap-3">
+            <button type="button" class="rounded-2xl border px-4 py-3 font-semibold" [class.border-blue-600]="paymentForm.value.paymentMode === 'Dummy'" [class.bg-blue-50]="paymentForm.value.paymentMode === 'Dummy'" (click)="paymentForm.patchValue({ paymentMode: 'Dummy' }); paymentMode.set('Dummy')">Dummy</button>
+            <button type="button" class="rounded-2xl border px-4 py-3 font-semibold" [class.border-blue-600]="paymentForm.value.paymentMode === 'Razorpay'" [class.bg-blue-50]="paymentForm.value.paymentMode === 'Razorpay'" (click)="paymentForm.patchValue({ paymentMode: 'Razorpay' }); paymentMode.set('Razorpay')">Razorpay</button>
+          </div>
+
+          <button type="button" class="mt-5 w-full rounded-2xl bg-emerald-600 px-4 py-3 font-bold text-white hover:bg-emerald-700 disabled:opacity-60" (click)="confirmBooking()" [disabled]="actionLoading() || !lockResponse()">
+            @if (actionLoading()) { Confirming... } @else { Confirm booking }
+          </button>
+
+          @if (bookingResponse()) {
+            <div class="mt-5 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-800">
+              <p class="font-semibold">PNR {{ bookingResponse()?.pnr }}</p>
+              <p class="mt-1">Payment: {{ bookingResponse()?.paymentStatus }}</p>
+              <p>Total amount: ₹{{ bookingResponse()?.totalAmount }}</p>
+              <button type="button" class="mt-3 rounded-full bg-white px-4 py-2 font-semibold text-emerald-700 shadow" (click)="downloadTicket()">Download ticket</button>
+            </div>
+          }
+        </div>
+      </section>
+    </div>
+  </div>
+</div>

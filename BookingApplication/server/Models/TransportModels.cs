@@ -15,6 +15,12 @@ public enum OperatorApprovalStatus
     Rejected = 3
 }
 
+public enum TripType
+{
+    OneTime = 1,
+    Daily = 2
+}
+
 public sealed class TripSearchRequest
 {
     [Required]
@@ -43,6 +49,8 @@ public sealed class TripSummary
     public decimal BasePrice { get; set; }
     public decimal PlatformFee { get; set; }
     public bool IsVariablePrice { get; set; }
+    public TripType TripType { get; set; } = TripType.OneTime;
+    public string? DaysOfWeek { get; set; }
 }
 
 public sealed class TripSearchResponse
@@ -223,6 +231,7 @@ public sealed class BusResponse
 {
     public Guid BusId { get; set; }
     public Guid OperatorId { get; set; }
+    public string BusNumber { get; set; } = string.Empty;
     public string BusName { get; set; } = string.Empty;
     public int Capacity { get; set; }
     public bool IsTemporarilyUnavailable { get; set; }
@@ -313,7 +322,7 @@ public sealed class NotificationResponse
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class LoginRequest
+public sealed class CustomerLoginRequest
 {
     [Required]
     [EmailAddress]
@@ -454,6 +463,25 @@ public sealed class OperatorLoginRequest
     [Required]
     [MinLength(8)]
     public string Password { get; set; } = string.Empty;
+}
+
+public sealed class AdminLoginRequest
+{
+    [Required]
+    [EmailAddress]
+    public string Email { get; set; } = string.Empty;
+
+    [Required]
+    [MinLength(8)]
+    public string Password { get; set; } = string.Empty;
+}
+
+public sealed class AdminLoginResponse
+{
+    public string Email { get; set; } = string.Empty;
+    public string JwtToken { get; set; } = string.Empty;
+    public string Role { get; set; } = UserRole.Admin.ToString();
+    public string Message { get; set; } = string.Empty;
 }
 
 public sealed class OperatorLoginResponse
@@ -601,10 +629,16 @@ public sealed class TripCreateRequestWithDetails
     [Required]
     public DateTime ArrivalTime { get; set; }
 
-    [Range(100, 10000)]
+    [Range(1, 10000)]
     public decimal BasePrice { get; set; }
 
     public string? PickupPoints { get; set; }
 
     public string? DropPoints { get; set; }
+
+    /// <summary>OneTime or Daily</summary>
+    public TripType TripType { get; set; } = TripType.OneTime;
+
+    /// <summary>Comma-separated days for daily trips, e.g. "Mon,Tue,Wed"</summary>
+    public string? DaysOfWeek { get; set; }
 }

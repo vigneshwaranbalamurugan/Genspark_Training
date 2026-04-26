@@ -21,6 +21,7 @@ public interface ITransportService
     RouteResponse CreateRoute(RouteRequest request);
     IEnumerable<RouteResponse> GetRoutes();
     BusResponse AddBus(BusRequest request);
+    IEnumerable<BusResponse> GetAllBuses();
     IEnumerable<BusResponse> GetOperatorBuses(Guid operatorId);
     BusResponse ApproveBus(Guid busId, ApprovalRequest request);
     BusResponse SetBusTemporaryAvailability(Guid operatorId, Guid busId, bool unavailable);
@@ -30,7 +31,7 @@ public interface ITransportService
     IEnumerable<NotificationResponse> GetNotifications(string recipientEmail);
 
     // Authentication
-    LoginResponse Login(LoginRequest request);
+    LoginResponse Login(CustomerLoginRequest request);
 
     // Enhanced Search
     TripSearchResponse SearchTripsFuzzy(string source, string destination, DateOnly date, DateOnly? returnDate);

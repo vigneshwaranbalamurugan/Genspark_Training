@@ -1,0 +1,171 @@
+<div class="min-h-screen bg-gray-50">
+  <!-- Navigation Header -->
+  <header class="bg-white shadow-sm sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <button (click)="toggleSidebar()" class="md:hidden text-gray-600 hover:text-gray-900">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+          </svg>
+        </button>
+        <h1 class="text-2xl font-bold text-blue-600">BookingApp</h1>
+      </div>
+
+      <!-- User Menu -->
+      <div class="flex items-center gap-4">
+        <div class="text-right hidden sm:block">
+          <p class="text-sm font-semibold text-gray-900">{{ currentUser()?.firstName }} {{ currentUser()?.lastName }}</p>
+          <p class="text-xs text-gray-600">{{ currentUser()?.email }}</p>
+        </div>
+        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center text-white font-bold">
+          {{ getInitials() }}
+        </div>
+        <button
+          (click)="logout()"
+          class="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition"
+        >
+          Logout
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="flex">
+    <!-- Sidebar -->
+    <aside
+      class="fixed md:relative left-0 top-0 md:top-16 w-64 bg-gray-900 text-white h-screen md:h-auto overflow-y-auto transition-transform duration-300 z-30"
+      [class.translate-x-0]="sidebarOpen() || true"
+      [class.-translate-x-full]="!sidebarOpen() && false"
+    >
+      <nav class="p-6 space-y-2">
+        <button
+          (click)="navigateTo('/dashboard')"
+          class="w-full text-left px-4 py-3 rounded-lg hover:bg-gray-800 transition flex items-center gap-3"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-3m0 0l7-4 7 4M5 9v10a1 1 0 001 1h12a1 1 0 001-1V9m-9 11l4-4m-9-2l-2-3m0 0L3 7m9 4l4-4"></path>
+          </svg>
+          <span>Dashboard</span>
+        </button>
+
+        <button
+          (click)="navigateTo('/')"
+          class="w-full text-left px-4 py-3 rounded-lg hover:bg-gray-800 transition flex items-center gap-3"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+          </svg>
+          <span>Search Trips</span>
+        </button>
+
+        <button
+          (click)="navigateTo('/history')"
+          class="w-full text-left px-4 py-3 rounded-lg hover:bg-gray-800 transition flex items-center gap-3"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+          </svg>
+          <span>My Bookings</span>
+        </button>
+
+        <button
+          (click)="navigateTo('/profile')"
+          class="w-full text-left px-4 py-3 rounded-lg hover:bg-gray-800 transition flex items-center gap-3"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+          </svg>
+          <span>Profile</span>
+        </button>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 p-4 md:p-8">
+      <div class="max-w-6xl mx-auto">
+        <!-- Welcome Card -->
+        <div class="bg-gradient-to-r from-blue-600 to-emerald-600 rounded-2xl p-8 text-white mb-8 shadow-lg">
+          <h2 class="text-4xl font-bold mb-2">Welcome, {{ currentUser()?.firstName }}! 👋</h2>
+          <p class="text-blue-100">Ready to book your next journey? Explore amazing trips and create unforgettable memories.</p>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div class="bg-white rounded-xl shadow-md p-6">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-gray-600 text-sm">Total Bookings</p>
+                <p class="text-3xl font-bold text-gray-900">0</p>
+              </div>
+              <div class="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-md p-6">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-gray-600 text-sm">Upcoming Trips</p>
+                <p class="text-3xl font-bold text-gray-900">0</p>
+              </div>
+              <div class="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center">
+                <svg class="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-md p-6">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-gray-600 text-sm">Profile Status</p>
+                <p class="text-3xl font-bold text-gray-900">{{ currentUser()?.profileCompleted ? 'Complete' : 'Pending' }}</p>
+              </div>
+              <div class="w-12 h-12 rounded-full" [class]="currentUser()?.profileCompleted ? 'bg-green-100' : 'bg-yellow-100'" [class.flex]="true" [class.items-center]="true" [class.justify-center]="true">
+                <svg class="w-6 h-6" [class]="currentUser()?.profileCompleted ? 'text-green-600' : 'text-yellow-600'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Featured Destinations -->
+        <div class="bg-white rounded-xl shadow-md p-8">
+          <h3 class="text-2xl font-bold text-gray-900 mb-6">Popular Routes</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div class="border-2 border-gray-200 rounded-lg p-6 hover:border-blue-500 transition cursor-pointer">
+              <h4 class="font-bold text-gray-900">Mumbai → Delhi</h4>
+              <p class="text-gray-600 text-sm mt-2">Premium overnight buses</p>
+              <button class="mt-4 text-blue-600 font-semibold hover:text-blue-700" (click)="navigateTo('/')">View Trips →</button>
+            </div>
+
+            <div class="border-2 border-gray-200 rounded-lg p-6 hover:border-emerald-500 transition cursor-pointer">
+              <h4 class="font-bold text-gray-900">Bangalore → Hyderabad</h4>
+              <p class="text-gray-600 text-sm mt-2">Comfortable day journey</p>
+              <button class="mt-4 text-emerald-600 font-semibold hover:text-emerald-700" (click)="navigateTo('/')">View Trips →</button>
+            </div>
+
+            <div class="border-2 border-gray-200 rounded-lg p-6 hover:border-orange-500 transition cursor-pointer">
+              <h4 class="font-bold text-gray-900">Chennai → Bangalore</h4>
+              <p class="text-gray-600 text-sm mt-2">Budget-friendly options</p>
+              <button class="mt-4 text-orange-600 font-semibold hover:text-orange-700" (click)="navigateTo('/')">View Trips →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Mobile Sidebar Overlay -->
+  @if (sidebarOpen()) {
+    <div
+      class="md:hidden fixed inset-0 bg-black bg-opacity-50 z-20"
+      (click)="toggleSidebar()"
+    ></div>
+  }
+</div>

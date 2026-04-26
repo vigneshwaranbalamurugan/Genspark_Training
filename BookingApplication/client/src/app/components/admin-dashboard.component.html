@@ -1,0 +1,262 @@
+<div class="admin-layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h2>Admin Panel</h2>
+    </div>
+    <nav class="sidebar-nav">
+      <a [class.active]="activeTab() === 'dashboard'" (click)="setTab('dashboard')">
+        <span class="icon">📊</span> Dashboard
+      </a>
+      <a [class.active]="activeTab() === 'operators'" (click)="setTab('operators')">
+        <span class="icon">🏢</span> Operators
+      </a>
+      <a [class.active]="activeTab() === 'buses'" (click)="setTab('buses')">
+        <span class="icon">🚌</span> Buses
+      </a>
+      <a [class.active]="activeTab() === 'routes'" (click)="setTab('routes')">
+        <span class="icon">🗺️</span> Routes
+      </a>
+      <a [class.active]="activeTab() === 'settings'" (click)="setTab('settings')">
+        <span class="icon">⚙️</span> Settings
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="logout-btn" (click)="logout()">Logout</button>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <header class="topbar">
+      <h1>
+        @switch(activeTab()) {
+          @case('dashboard') { Dashboard Overview }
+          @case('operators') { Manage Operators }
+          @case('buses') { Manage Buses }
+          @case('routes') { Manage Routes }
+          @case('settings') { Platform Settings }
+        }
+      </h1>
+      <div class="user-info">
+        Admin Mode
+      </div>
+    </header>
+
+    <div class="content-body">
+      @if (errorMessage()) {
+        <div class="msg error">{{ errorMessage() }}</div>
+      }
+      @if (successMessage()) {
+        <div class="msg success">{{ successMessage() }}</div>
+      }
+
+      <!-- Dashboard Tab -->
+      @if (activeTab() === 'dashboard') {
+        <section class="stats-grid">
+          <article class="stat-card">
+            <div class="stat-icon">🏢</div>
+            <div class="stat-details">
+              <h3>Operators</h3>
+              <strong>{{ operators().length }}</strong>
+            </div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-icon">🚌</div>
+            <div class="stat-details">
+              <h3>Buses</h3>
+              <strong>{{ buses().length }}</strong>
+            </div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-icon">🗺️</div>
+            <div class="stat-details">
+              <h3>Routes</h3>
+              <strong>{{ routes().length }}</strong>
+            </div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-icon">💰</div>
+            <div class="stat-details">
+              <h3>Current Fee</h3>
+              <strong>Rs {{ platformFee()?.amount || 0 }}</strong>
+            </div>
+          </article>
+        </section>
+      }
+
+      <!-- Operators Tab -->
+      @if (activeTab() === 'operators') {
+        <section class="feature-section">
+          <div class="section-header">
+            <div class="search-bar">
+              <input type="text" [(ngModel)]="operatorSearch" (ngModelChange)="operatorSearch.set($event)" placeholder="Search operators..." />
+            </div>
+          </div>
+          
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Company Name</th>
+                  <th>Email</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (op of filteredOperators(); track op.operatorId) {
+                  <tr>
+                    <td>{{ op.companyName }}</td>
+                    <td>{{ op.email }}</td>
+                    <td>
+                      <span class="badge" [ngClass]="op.approvalStatus.toLowerCase()">
+                        {{ op.approvalStatus }}
+                      </span>
+                      @if (op.isDisabled) {
+                        <span class="badge danger">Disabled</span>
+                      }
+                    </td>
+                    <td class="actions">
+                      @if (op.approvalStatus === 'Pending') {
+                        <button class="btn-small success" (click)="updateOperatorStatus(op.operatorId, true)">Approve</button>
+                        <button class="btn-small danger" (click)="updateOperatorStatus(op.operatorId, false)">Reject</button>
+                      }
+                      <button class="btn-small" [class.danger]="!op.isDisabled" [class.success]="op.isDisabled" (click)="toggleOperatorDisabled(op.operatorId, op.isDisabled)">
+                        {{ op.isDisabled ? 'Enable' : 'Disable' }}
+                      </button>
+                    </td>
+                  </tr>
+                }
+                @if (filteredOperators().length === 0) {
+                  <tr>
+                    <td colspan="4" class="text-center">No operators found.</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      }
+
+      <!-- Buses Tab -->
+      @if (activeTab() === 'buses') {
+        <section class="feature-section">
+          <div class="section-header">
+            <div class="search-bar">
+              <input type="text" [(ngModel)]="busSearch" (ngModelChange)="busSearch.set($event)" placeholder="Search buses..." />
+            </div>
+          </div>
+          
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Bus Name</th>
+                  <th>Capacity</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (bus of filteredBuses(); track bus.busId) {
+                  <tr>
+                    <td>{{ bus.busName }}</td>
+                    <td>{{ bus.capacity }}</td>
+                    <td>
+                      @if (bus.isApproved) {
+                        <span class="badge success">Approved</span>
+                      } @else {
+                        <span class="badge pending">Pending</span>
+                      }
+                      @if (!bus.isActive) {
+                        <span class="badge danger">Inactive</span>
+                      }
+                    </td>
+                    <td class="actions">
+                      @if (!bus.isApproved) {
+                        <button class="btn-small success" (click)="updateBusStatus(bus.busId, true)">Approve</button>
+                        <button class="btn-small danger" (click)="updateBusStatus(bus.busId, false)">Reject</button>
+                      }
+                    </td>
+                  </tr>
+                }
+                @if (filteredBuses().length === 0) {
+                  <tr>
+                    <td colspan="4" class="text-center">No buses found.</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      }
+
+      <!-- Routes Tab -->
+      @if (activeTab() === 'routes') {
+        <section class="feature-section">
+          <div class="section-header">
+            <div class="search-bar">
+              <input type="text" [(ngModel)]="routeSearch" (ngModelChange)="routeSearch.set($event)" placeholder="Search routes..." />
+            </div>
+          </div>
+          
+          <div class="card add-form">
+            <h3>Add New Route</h3>
+            <div class="form-row">
+              <input [(ngModel)]="routeForm.source" placeholder="Source City" />
+              <input [(ngModel)]="routeForm.destination" placeholder="Destination City" />
+              <button class="btn-primary" (click)="addRoute()">Add Route</button>
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Destination</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (route of filteredRoutes(); track route.routeId) {
+                  <tr>
+                    <td>{{ route.source }}</td>
+                    <td>{{ route.destination }}</td>
+                  </tr>
+                }
+                @if (filteredRoutes().length === 0) {
+                  <tr>
+                    <td colspan="2" class="text-center">No routes found.</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      }
+
+      <!-- Settings Tab -->
+      @if (activeTab() === 'settings') {
+        <section class="feature-section">
+          <div class="card settings-card">
+            <h2>Platform Fee Settings</h2>
+            <p>Set the global platform fee applied to all bookings.</p>
+            
+            <div class="form-group">
+              <label>Fee Amount (Rs)</label>
+              <input type="number" [(ngModel)]="feeForm.feeAmount" placeholder="Amount" />
+            </div>
+            <div class="form-group">
+              <label>Description</label>
+              <input type="text" [(ngModel)]="feeForm.description" placeholder="Optional description" />
+            </div>
+            
+            <button class="btn-primary" (click)="setPlatformFee()">Save Settings</button>
+          </div>
+        </section>
+      }
+
+    </div>
+  </main>
+</div>

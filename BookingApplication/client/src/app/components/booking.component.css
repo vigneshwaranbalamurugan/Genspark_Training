@@ -1,0 +1,53 @@
+:host {
+  display: block;
+}
+
+.seat-tile {
+  min-height: 3.5rem;
+  border-radius: 1rem;
+  border: 1px solid #dbe2ea;
+  background: #f8fafc;
+  font-weight: 700;
+  color: #334155;
+  transition: all 0.2s ease;
+}
+
+.seat-tile:hover:not(.booked):not(.female) {
+  transform: translateY(-1px);
+  border-color: #0056b3;
+  background: #eff6ff;
+  color: #000000;
+}
+
+.seat-tile.selected {
+  background: #89bcff;
+  border-color: #2563eb;
+  color: #1d4ed8;
+}
+
+.seat-tile.booked {
+  background: #dadade;
+  border-color: lab(55.57% 1.87 0.66);
+  color: #000000;
+}
+
+.seat-tile.available {
+  background: #10b981;
+  border-color: #cbe1cb;
+  color: #f1f1f1;
+  cursor: not-allowed;
+}
+
+.seat-tile.female {
+  background: #fce7f3;
+  border-color: #f9a8d4;
+  color: #be185d;
+  cursor: not-allowed;
+}
+
+.seat-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}

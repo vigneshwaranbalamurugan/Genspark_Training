@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using server.Models;
 using server.Services;
@@ -6,15 +7,19 @@ namespace server.Controllers;
 
 [ApiController]
 [Route("api/operator")]
+[Authorize(Roles = "Operator")]
 public sealed class OperatorController : ControllerBase
 {
     private readonly ITransportService transportService;
+    private readonly IJwtService jwtService;
 
-    public OperatorController(ITransportService transportService)
+    public OperatorController(ITransportService transportService, IJwtService jwtService)
     {
         this.transportService = transportService;
+        this.jwtService = jwtService;
     }
 
+    [AllowAnonymous]
     [HttpPost("register")]
     public ActionResult<OperatorResponse> Register([FromBody] OperatorRegisterRequest request)
     {
@@ -32,6 +37,12 @@ public sealed class OperatorController : ControllerBase
     public ActionResult<IEnumerable<BusResponse>> Buses([FromRoute] Guid operatorId)
     {
         return Ok(transportService.GetOperatorBuses(operatorId));
+    }
+
+    [HttpGet("routes")]
+    public ActionResult<IEnumerable<RouteResponse>> Routes()
+    {
+        return Ok(transportService.GetRoutes());
     }
 
     [HttpPost("buses")]
@@ -108,12 +119,15 @@ public sealed class OperatorController : ControllerBase
         }
     }
 
+    [AllowAnonymous]
     [HttpPost("login")]
     public ActionResult<OperatorLoginResponse> Login([FromBody] OperatorLoginRequest request)
     {
         try
         {
-            return Ok(transportService.OperatorLogin(request));
+            var response = transportService.OperatorLogin(request);
+            response.JwtToken = jwtService.GenerateToken(response.Email, UserRole.Operator.ToString());
+            return Ok(response);
         }
         catch (KeyNotFoundException exception)
         {

@@ -9,10 +9,12 @@ namespace server.Controllers;
 public sealed class RegistrationController : ControllerBase
 {
     private readonly IRegistrationService registrationService;
+    private readonly IJwtService jwtService;
 
-    public RegistrationController(IRegistrationService registrationService)
+    public RegistrationController(IRegistrationService registrationService, IJwtService jwtService)
     {
         this.registrationService = registrationService;
+        this.jwtService = jwtService;
     }
 
     [HttpPost("start")]
@@ -50,7 +52,14 @@ public sealed class RegistrationController : ControllerBase
     {
         try
         {
-            return Ok(registrationService.SetPassword(request.Email, request.Password));
+            var response = registrationService.SetPassword(request.Email, request.Password);
+            
+            // Generate JWT token
+            var token = jwtService.GenerateToken(request.Email, UserRole.User.ToString());
+            response.AccessToken = token;
+            response.Role = UserRole.User.ToString();
+            
+            return Ok(response);
         }
         catch (KeyNotFoundException exception)
         {
@@ -93,11 +102,16 @@ public sealed class RegistrationController : ControllerBase
     }
 
     [HttpPost("login")]
-    public ActionResult<LoginResponse> Login([FromBody] LoginRequest request, [FromServices] ITransportService transportService)
+    public ActionResult<LoginResponse> Login([FromBody] CustomerLoginRequest request, [FromServices] ITransportService transportService)
     {
         try
         {
-            return Ok(transportService.Login(request));
+            var response = transportService.Login(request);
+            
+            // Generate JWT token
+            response.JwtToken = jwtService.GenerateToken(request.Email, UserRole.User.ToString());
+            
+            return Ok(response);
         }
         catch (KeyNotFoundException exception)
         {

@@ -1,0 +1,382 @@
+<div class="admin-layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h2>Operator Panel</h2>
+    </div>
+    <nav class="sidebar-nav">
+      <a [class.active]="activeTab() === 'dashboard'" (click)="setTab('dashboard')">
+        <span class="icon">📊</span> Dashboard
+      </a>
+      <a [class.active]="activeTab() === 'buses'" (click)="setTab('buses')">
+        <span class="icon">🚌</span> Buses
+      </a>
+      <a [class.active]="activeTab() === 'routes'" (click)="setTab('routes')">
+        <span class="icon">🗺️</span> Routes
+      </a>
+      <a [class.active]="activeTab() === 'trips'" (click)="setTab('trips')">
+        <span class="icon">🛣️</span> Trips
+      </a>
+      <a [class.active]="activeTab() === 'bookings'" (click)="setTab('bookings')">
+        <span class="icon">🎟️</span> Bookings
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="logout-btn" (click)="logout()">Logout</button>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <header class="topbar">
+      <h1>
+        @switch(activeTab()) {
+          @case('dashboard') { Dashboard Overview }
+          @case('buses') { Manage Buses }
+          @case('routes') { Manage Preferred Routes }
+          @case('trips') { Create Trips }
+          @case('bookings') { View Bookings }
+        }
+      </h1>
+      <div class="user-info">
+        Operator Mode
+      </div>
+    </header>
+
+    <div class="content-body">
+      @if (errorMessage()) {
+        <div class="msg error">{{ errorMessage() }}</div>
+      }
+      @if (successMessage()) {
+        <div class="msg success">{{ successMessage() }}</div>
+      }
+
+      <!-- Dashboard Tab -->
+      @if (activeTab() === 'dashboard') {
+        <section class="stats-grid">
+          <article class="stat-card">
+            <div class="stat-icon">🚌</div>
+            <div class="stat-details">
+              <h3>Total Buses</h3>
+              <strong>{{ buses().length }}</strong>
+            </div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-icon">🎟️</div>
+            <div class="stat-details">
+              <h3>Total Bookings</h3>
+              <strong>{{ bookings().length }}</strong>
+            </div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-icon">💰</div>
+            <div class="stat-details">
+              <h3>Total Revenue</h3>
+              <strong>Rs {{ revenue()?.totalRevenue || 0 }}</strong>
+            </div>
+          </article>
+        </section>
+      }
+
+      <!-- Buses Tab -->
+      @if (activeTab() === 'buses') {
+        <section class="feature-section">
+          <div class="card add-form">
+            <h3>Register New Bus</h3>
+            <div class="grid-4">
+              <input [(ngModel)]="busForm.busNumber" placeholder="Bus Number (e.g. TN-01-AB-1234)" />
+              <input [(ngModel)]="busForm.busName" placeholder="Bus Name (e.g. Volvo Multi-Axle)" />
+              <input type="number" [(ngModel)]="busForm.capacity" placeholder="Capacity" />
+              <input [(ngModel)]="busForm.layoutName" placeholder="Layout Name" />
+            </div>
+            <button class="btn-primary" (click)="registerBus()">Register Bus</button>
+          </div>
+
+          <div class="section-header">
+            <div class="search-bar">
+              <input type="text" [(ngModel)]="busSearch" (ngModelChange)="busSearch.set($event)" placeholder="Search buses..." />
+            </div>
+          </div>
+          
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Bus Details</th>
+                  <th>Capacity</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (bus of filteredBuses(); track bus.busId) {
+                  <tr>
+                    <td>
+                      <strong>{{ bus.busNumber }}</strong><br>
+                      <small>{{ bus.busName }}</small>
+                    </td>
+                    <td>{{ bus.capacity }}</td>
+                    <td>
+                      @if (bus.isApproved) {
+                        <span class="badge success">Approved</span>
+                      } @else {
+                        <span class="badge pending">Pending</span>
+                      }
+                      @if (bus.isTemporarilyUnavailable) {
+                        <span class="badge danger">Unavailable</span>
+                      }
+                    </td>
+                    <td class="actions">
+                      <button class="btn-small" (click)="toggleTemporary(bus.busId, !bus.isTemporarilyUnavailable)">
+                        {{ bus.isTemporarilyUnavailable ? 'Make Available' : 'Make Unavailable' }}
+                      </button>
+                      <button class="btn-small danger" (click)="removeBus(bus.busId)">Remove</button>
+                    </td>
+                  </tr>
+                }
+                @if (filteredBuses().length === 0) {
+                  <tr>
+                    <td colspan="4" class="text-center">No buses found.</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card settings-card" style="margin-top: 24px;">
+            <h3>Request Permanent Disable</h3>
+            <p>If a bus is permanently out of service, request admin to disable it.</p>
+            <div class="form-group">
+              <label>Select Bus</label>
+              <select [(ngModel)]="disableRequest.busId">
+                <option value="">-- Select Bus --</option>
+                @for (bus of buses(); track bus.busId) {
+                  <option [value]="bus.busId">{{ bus.busNumber }} - {{ bus.busName }}</option>
+                }
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Reason</label>
+              <input [(ngModel)]="disableRequest.reason" placeholder="Reason for disable request" />
+            </div>
+            <button class="btn-primary" (click)="requestDisableBus()">Submit Request</button>
+          </div>
+        </section>
+      }
+
+      <!-- Routes Tab -->
+      @if (activeTab() === 'routes') {
+        <section class="feature-section">
+          
+          <div class="card settings-card">
+            <h3>Add Preferred Route</h3>
+            <p>Select a route from the global system to add it to your preferred routes.</p>
+            <div class="form-group">
+              <label>Select Route</label>
+              <select [(ngModel)]="routeForm.routeId">
+                <option value="">-- Select Route --</option>
+                @for (r of allGlobalRoutes(); track r.routeId) {
+                  <option [value]="r.routeId">{{ r.source }} to {{ r.destination }}</option>
+                }
+              </select>
+            </div>
+            <button class="btn-primary" (click)="addPreferredRoute()">Add to Preferred Routes</button>
+          </div>
+
+          <div class="section-header">
+            <h3>Your Preferred Routes</h3>
+            <div class="search-bar">
+              <input type="text" [(ngModel)]="routeSearch" (ngModelChange)="routeSearch.set($event)" placeholder="Search your routes..." />
+            </div>
+          </div>
+          
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Destination</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (route of filteredRoutes(); track route.routeId) {
+                  <tr>
+                    <td>{{ route.source }}</td>
+                    <td>{{ route.destination }}</td>
+                    <td class="actions">
+                      <span class="badge pending">Active</span>
+                    </td>
+                  </tr>
+                }
+                @if (filteredRoutes().length === 0) {
+                  <tr>
+                    <td colspan="3" class="text-center">No preferred routes found.</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card add-form" style="margin-top: 24px;">
+            <h3>Add Pickup & Drop Points</h3>
+            <p>Add specific points for a preferred route.</p>
+            <div class="form-group" style="max-width: 400px;">
+              <label>Select Route</label>
+              <select [(ngModel)]="routeForm.routeId">
+                <option value="">-- Select Route --</option>
+                @for (r of preferredRoutes(); track r.routeId) {
+                  <option [value]="r.routeId">{{ r.source }} to {{ r.destination }}</option>
+                }
+              </select>
+            </div>
+            <div class="grid-2">
+              <div class="form-group">
+                <label>Pickup Point Name</label>
+                <input [(ngModel)]="routeForm.pickupPoint" placeholder="e.g. Central Station" />
+              </div>
+              <div class="form-group">
+                <label>Pickup Address (optional)</label>
+                <input [(ngModel)]="routeForm.pickupAddress" placeholder="Full address" />
+              </div>
+              <div class="form-group">
+                <label>Drop Point Name</label>
+                <input [(ngModel)]="routeForm.dropPoint" placeholder="e.g. North Terminal" />
+              </div>
+              <div class="form-group">
+                <label>Drop Address (optional)</label>
+                <input [(ngModel)]="routeForm.dropAddress" placeholder="Full address" />
+              </div>
+            </div>
+            <button class="btn-primary" (click)="addPickupDropPoints()">Add Points</button>
+          </div>
+        </section>
+      }
+
+      <!-- Trips Tab -->
+      @if (activeTab() === 'trips') {
+        <section class="feature-section">
+          <div class="card settings-card" style="max-width: 800px;">
+            <h2>Create New Trip</h2>
+            <p>Schedule a new trip with a fixed base price. Ensure your bus is approved and active.</p>
+            
+            <div class="grid-2">
+              <div class="form-group">
+                <label>Select Bus</label>
+                <select [(ngModel)]="tripForm.busId">
+                  <option value="">-- Select Bus --</option>
+                  @for (bus of buses(); track bus.busId) {
+                    <option [value]="bus.busId" [disabled]="!bus.isApproved || bus.isTemporarilyUnavailable">
+                      {{ bus.busNumber }} - {{ bus.busName }} {{ !bus.isApproved ? '(Pending Approval)' : '' }}
+                    </option>
+                  }
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Select Route</label>
+                <select [(ngModel)]="tripForm.routeId" (change)="onTripRouteSelected()">
+                  <option value="">-- Select Route --</option>
+                  @for (r of preferredRoutes(); track r.routeId) {
+                    <option [value]="r.routeId">{{ r.source }} to {{ r.destination }}</option>
+                  }
+                </select>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="form-group">
+                <label>Departure Time</label>
+                <input type="datetime-local" [(ngModel)]="tripForm.departureTime" />
+              </div>
+              <div class="form-group">
+                <label>Arrival Time</label>
+                <input type="datetime-local" [(ngModel)]="tripForm.arrivalTime" />
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="form-group">
+                <label>Base Price (Rs)</label>
+                <input type="number" [(ngModel)]="tripForm.basePrice" placeholder="Price per seat" />
+              </div>
+              <div class="form-group">
+                <label>Trip Type</label>
+                <select [(ngModel)]="tripForm.tripType">
+                  <option [value]="1">One-Time Trip</option>
+                  <option [value]="2">Daily Trip</option>
+                </select>
+              </div>
+            </div>
+
+            @if (tripForm.tripType == 2) {
+              <div class="form-group">
+                <label>Select Days of Week</label>
+                <div class="days-selector">
+                  @for (day of daysList; track day) {
+                    <button type="button" 
+                            class="day-btn" 
+                            [class.active]="tripForm.daysOfWeek.includes(day)"
+                            (click)="toggleDay(day)">
+                      {{ day }}
+                    </button>
+                  }
+                </div>
+              </div>
+            }
+
+            <button class="btn-primary" (click)="createTrip()">Publish Trip</button>
+          </div>
+        </section>
+      }
+
+      <!-- Bookings Tab -->
+      @if (activeTab() === 'bookings') {
+        <section class="feature-section">
+          <div class="section-header">
+            <div class="search-bar">
+              <input type="text" [(ngModel)]="bookingSearch" (ngModelChange)="bookingSearch.set($event)" placeholder="Search by PNR or City..." />
+            </div>
+          </div>
+          
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>PNR</th>
+                  <th>Route</th>
+                  <th>Seats</th>
+                  <th>Total Amount</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (booking of filteredBookings(); track booking.bookingId) {
+                  <tr>
+                    <td><strong>{{ booking.pnr }}</strong></td>
+                    <td>{{ booking.source }} to {{ booking.destination }}</td>
+                    <td>{{ booking.seatNumbers.join(', ') }}</td>
+                    <td>Rs {{ booking.totalAmount }}</td>
+                    <td>
+                      @if (booking.isCancelled) {
+                        <span class="badge danger">Cancelled</span>
+                      } @else {
+                        <span class="badge success">Confirmed</span>
+                      }
+                    </td>
+                  </tr>
+                }
+                @if (filteredBookings().length === 0) {
+                  <tr>
+                    <td colspan="5" class="text-center">No bookings found.</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      }
+
+    </div>
+  </main>
+</div>

@@ -1,3 +1,135 @@
-/* You can add global styles to this file, and also import other style files */
+/* Global Styles */
+:root {
+  /* Primary Colors */
+  --primary-blue: #0056b3;
+  --primary-orange: #FF6600;
+  --accent-green: #10b981;
+  
+  /* Secondary Colors */
+  --light-blue: #e3f2fd;
+  --light-green: #ecfdf5;
+  --light-orange: #fff7ed;
+  
+  /* Neutral Colors */
+  --text-primary: #333333;
+  --text-secondary: #666666;
+  --bg-light: #F2F2F2;
+  --bg-white: #FFFFFF;
+}
 
 @import 'tailwindcss';
+
+/* Enhanced Typography */
+html, body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+p {
+  line-height: 1.6;
+}
+
+/* Button Enhancements */
+button {
+  transition: all 0.3s ease;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+button:focus-visible {
+  outline: 2px solid var(--primary-blue);
+  outline-offset: 2px;
+}
+
+/* Form Enhancements */
+input:focus, select:focus, textarea:focus {
+  box-shadow: 0 0 0 3px rgba(0, 86, 179, 0.1);
+}
+
+input:disabled, select:disabled, textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Smooth Scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Selection Styling */
+::selection {
+  background-color: var(--primary-blue);
+  color: white;
+}
+
+::-moz-selection {
+  background-color: var(--primary-blue);
+  color: white;
+}
+
+/* Animations */
+@keyframes slideIn {
+  from {
+    transform: translateX(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Responsive Typography */
+@media (max-width: 768px) {
+  body {
+    font-size: 0.95rem;
+  }
+
+  h1 {
+    font-size: 1.75rem;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+  }
+}

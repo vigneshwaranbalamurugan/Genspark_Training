@@ -657,11 +657,40 @@ public sealed class TransportService : ITransportService
         };
     }
 
+    public IEnumerable<BusResponse> GetAllBuses()
+    {
+        using var connection = OpenConnection();
+        using var command = new NpgsqlCommand(@"
+            SELECT id, operator_id, bus_number, bus_name, capacity, is_temporarily_unavailable, is_approved, is_active, layout_name
+            FROM buses
+            ORDER BY created_at DESC;", connection);
+        using var reader = command.ExecuteReader();
+
+        var items = new List<BusResponse>();
+        while (reader.Read())
+        {
+            items.Add(new BusResponse
+            {
+                BusId = reader.GetGuid(0),
+                OperatorId = reader.GetGuid(1),
+                BusNumber = reader.GetString(2),
+                BusName = reader.GetString(3),
+                Capacity = reader.GetInt32(4),
+                IsTemporarilyUnavailable = reader.GetBoolean(5),
+                IsApproved = reader.GetBoolean(6),
+                IsActive = reader.GetBoolean(7),
+                LayoutName = reader.GetString(8)
+            });
+        }
+
+        return items;
+    }
+
     public IEnumerable<BusResponse> GetOperatorBuses(Guid operatorId)
     {
         using var connection = OpenConnection();
         using var command = new NpgsqlCommand(@"
-            SELECT id, operator_id, bus_name, capacity, is_temporarily_unavailable, is_approved, is_active, layout_name
+            SELECT id, operator_id, bus_number, bus_name, capacity, is_temporarily_unavailable, is_approved, is_active, layout_name
             FROM buses
             WHERE operator_id = @operator_id
             ORDER BY created_at DESC;", connection);
@@ -675,12 +704,13 @@ public sealed class TransportService : ITransportService
             {
                 BusId = reader.GetGuid(0),
                 OperatorId = reader.GetGuid(1),
-                BusName = reader.GetString(2),
-                Capacity = reader.GetInt32(3),
-                IsTemporarilyUnavailable = reader.GetBoolean(4),
-                IsApproved = reader.GetBoolean(5),
-                IsActive = reader.GetBoolean(6),
-                LayoutName = reader.GetString(7)
+                BusNumber = reader.GetString(2),
+                BusName = reader.GetString(3),
+                Capacity = reader.GetInt32(4),
+                IsTemporarilyUnavailable = reader.GetBoolean(5),
+                IsApproved = reader.GetBoolean(6),
+                IsActive = reader.GetBoolean(7),
+                LayoutName = reader.GetString(8)
             });
         }
 
@@ -700,7 +730,18 @@ public sealed class TransportService : ITransportService
         command.Parameters.AddWithValue("id", busId);
         command.ExecuteNonQuery();
 
-        return (bus with { IsApproved = request.Approve }).ToResponse();
+        return new BusResponse
+        {
+            BusId = bus.Id,
+            OperatorId = bus.OperatorId,
+            BusNumber = bus.BusNumber,
+            BusName = bus.BusName,
+            Capacity = bus.Capacity,
+            IsTemporarilyUnavailable = bus.IsTemporarilyUnavailable,
+            IsApproved = request.Approve,
+            IsActive = bus.IsActive,
+            LayoutName = bus.LayoutName
+        };
     }
 
     public BusResponse SetBusTemporaryAvailability(Guid operatorId, Guid busId, bool unavailable)
@@ -1043,6 +1084,8 @@ public sealed class TransportService : ITransportService
                 is_variable_price BOOLEAN NOT NULL,
                 pickup_points TEXT NULL,
                 drop_points TEXT NULL,
+                trip_type TEXT NOT NULL DEFAULT 'OneTime',
+                days_of_week TEXT NULL,
                 is_active BOOLEAN NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL
             );
@@ -1117,6 +1160,18 @@ public sealed class TransportService : ITransportService
             );", connection);
 
         command.ExecuteNonQuery();
+
+        // Add trip_type and days_of_week columns if they don't exist (idempotent migration)
+        using var alterCommand = new NpgsqlCommand(@"
+            DO $$ BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='trips' AND column_name='trip_type') THEN
+                    ALTER TABLE trips ADD COLUMN trip_type TEXT NOT NULL DEFAULT 'OneTime';
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='trips' AND column_name='days_of_week') THEN
+                    ALTER TABLE trips ADD COLUMN days_of_week TEXT NULL;
+                END IF;
+            END $$;", connection);
+        alterCommand.ExecuteNonQuery();
     }
 
     private void SeedDemoData()
@@ -1245,7 +1300,7 @@ public sealed class TransportService : ITransportService
     private BusRecord GetBus(NpgsqlConnection connection, Guid busId)
     {
         using var command = new NpgsqlCommand(@"
-            SELECT id, operator_id, bus_name, capacity, is_temporarily_unavailable, is_approved, is_active, layout_name
+            SELECT id, operator_id, bus_number, bus_name, capacity, is_temporarily_unavailable, is_approved, is_active, layout_name
             FROM buses
             WHERE id = @id;", connection);
         command.Parameters.AddWithValue("id", busId);
@@ -1258,12 +1313,13 @@ public sealed class TransportService : ITransportService
         return new BusRecord(
             reader.GetGuid(0),
             reader.GetGuid(1),
-            reader.GetString(2),
-            reader.GetInt32(3),
-            reader.GetBoolean(4),
+            reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+            reader.GetString(3),
+            reader.GetInt32(4),
             reader.GetBoolean(5),
             reader.GetBoolean(6),
-            reader.GetString(7));
+            reader.GetBoolean(7),
+            reader.GetString(8));
     }
 
     private RouteResponse GetRoute(NpgsqlConnection connection, Guid routeId)
@@ -1306,13 +1362,13 @@ public sealed class TransportService : ITransportService
         return Convert.ToInt32(command.ExecuteScalar());
     }
 
-    public LoginResponse Login(LoginRequest request)
+    public LoginResponse Login(CustomerLoginRequest request)
     {
         var email = NormalizeEmail(request.Email);
         using var connection = OpenConnection();
         using var command = new NpgsqlCommand(@"
-            SELECT id, email, full_name, sso_provider
-            FROM users
+            SELECT id, email, password_hash, is_profile_completed, first_name, last_name
+            FROM registration_sessions
             WHERE email = @email;", connection);
         command.Parameters.AddWithValue("email", email);
 
@@ -1323,10 +1379,30 @@ public sealed class TransportService : ITransportService
         }
 
         var userId = reader.GetGuid(reader.GetOrdinal("id"));
-        var fullName = reader.IsDBNull(reader.GetOrdinal("full_name")) 
-            ? email 
-            : reader.GetString(reader.GetOrdinal("full_name"));
+        var passwordHash = reader.IsDBNull(reader.GetOrdinal("password_hash"))
+            ? null
+            : reader.GetString(reader.GetOrdinal("password_hash"));
+        var profileCompleted = reader.GetBoolean(reader.GetOrdinal("is_profile_completed"));
+        var firstName = reader.IsDBNull(reader.GetOrdinal("first_name"))
+            ? null
+            : reader.GetString(reader.GetOrdinal("first_name"));
+        var lastName = reader.IsDBNull(reader.GetOrdinal("last_name"))
+            ? null
+            : reader.GetString(reader.GetOrdinal("last_name"));
         reader.Close();
+
+        if (string.IsNullOrWhiteSpace(passwordHash))
+        {
+            throw new InvalidOperationException("Password is not set. Complete registration first.");
+        }
+
+        var verificationResult = passwordHasher.VerifyHashedPassword(email, passwordHash, request.Password);
+        if (verificationResult == PasswordVerificationResult.Failed)
+        {
+            throw new InvalidOperationException("Invalid password.");
+        }
+
+        var fullName = BuildFullName(firstName, lastName, email);
 
         var jwtToken = GenerateJwtToken(userId, email);
 
@@ -1338,6 +1414,15 @@ public sealed class TransportService : ITransportService
             JwtToken = jwtToken,
             Message = "Login successful"
         };
+    }
+
+    private static string BuildFullName(string? firstName, string? lastName, string fallbackEmail)
+    {
+        var fullName = string.Join(" ", new[] { firstName, lastName }
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!.Trim()));
+
+        return string.IsNullOrWhiteSpace(fullName) ? fallbackEmail : fullName;
     }
 
     public TripSearchResponse SearchTripsFuzzy(string source, string destination, DateOnly date, DateOnly? returnDate)
@@ -1719,30 +1804,47 @@ public sealed class TransportService : ITransportService
         command.Parameters.AddWithValue("destination", destination.ToLower());
         command.Parameters.AddWithValue("dest_pattern", destPattern);
 
-        using var reader = command.ExecuteReader();
-        var trips = new List<TripSummary>();
-
-        while (reader.Read())
+        var rows = new List<(Guid TripId, Guid BusId, string BusName, string Source, string Destination, DateTime DepartureTime, DateTime ArrivalTime, int Capacity, decimal BasePrice, decimal PlatformFee, bool IsVariablePrice)>();
+        using (var reader = command.ExecuteReader())
         {
-            var tripId = reader.GetGuid(reader.GetOrdinal("id"));
-            var capacity = reader.GetInt32(reader.GetOrdinal("capacity"));
-            var reserved = GetReservedSeatCount(connection, tripId);
-            var available = capacity - reserved;
+            while (reader.Read())
+            {
+                rows.Add((
+                    reader.GetGuid(reader.GetOrdinal("id")),
+                    reader.GetGuid(reader.GetOrdinal("bus_id")),
+                    reader.GetString(reader.GetOrdinal("bus_name")),
+                    reader.GetString(reader.GetOrdinal("source")),
+                    reader.GetString(reader.GetOrdinal("destination")),
+                    reader.GetDateTime(reader.GetOrdinal("departure_time")),
+                    reader.GetDateTime(reader.GetOrdinal("arrival_time")),
+                    reader.GetInt32(reader.GetOrdinal("capacity")),
+                    reader.GetDecimal(reader.GetOrdinal("base_price")),
+                    reader.GetDecimal(reader.GetOrdinal("platform_fee")),
+                    reader.GetBoolean(reader.GetOrdinal("is_variable_price"))
+                ));
+            }
+        }
+
+        var trips = new List<TripSummary>(rows.Count);
+        foreach (var row in rows)
+        {
+            var reserved = GetReservedSeatCount(connection, row.TripId);
+            var available = row.Capacity - reserved;
 
             trips.Add(new TripSummary
             {
-                TripId = tripId,
-                BusId = reader.GetGuid(reader.GetOrdinal("bus_id")),
-                BusName = reader.GetString(reader.GetOrdinal("bus_name")),
-                Source = reader.GetString(reader.GetOrdinal("source")),
-                Destination = reader.GetString(reader.GetOrdinal("destination")),
-                DepartureTime = reader.GetDateTime(reader.GetOrdinal("departure_time")),
-                ArrivalTime = reader.GetDateTime(reader.GetOrdinal("arrival_time")),
-                Capacity = capacity,
+                TripId = row.TripId,
+                BusId = row.BusId,
+                BusName = row.BusName,
+                Source = row.Source,
+                Destination = row.Destination,
+                DepartureTime = row.DepartureTime,
+                ArrivalTime = row.ArrivalTime,
+                Capacity = row.Capacity,
                 SeatsAvailable = available,
-                BasePrice = reader.GetDecimal(reader.GetOrdinal("base_price")),
-                PlatformFee = reader.GetDecimal(reader.GetOrdinal("platform_fee")),
-                IsVariablePrice = reader.GetBoolean(reader.GetOrdinal("is_variable_price"))
+                BasePrice = row.BasePrice,
+                PlatformFee = row.PlatformFee,
+                IsVariablePrice = row.IsVariablePrice
             });
         }
 
@@ -1801,8 +1903,12 @@ public sealed class TransportService : ITransportService
         }
 
         using (var lockCommand = new NpgsqlCommand(@"
-            SELECT COUNT(DISTINCT UNNEST(seat_numbers)) FROM seat_locks
-            WHERE trip_id = @trip_id AND expires_at > NOW();", connection))
+            SELECT COUNT(DISTINCT seat_num)
+            FROM (
+                SELECT UNNEST(seat_numbers) AS seat_num
+                FROM seat_locks
+                WHERE trip_id = @trip_id AND expires_at > NOW()
+            ) locked_seats;", connection))
         {
             lockCommand.Parameters.AddWithValue("trip_id", tripId);
             var lockCount = lockCommand.ExecuteScalar();
@@ -1921,12 +2027,11 @@ public sealed class TransportService : ITransportService
         using var connection = OpenConnection();
         string sql = @"
             SELECT b.id, b.pnr, b.trip_id, b.seat_numbers, b.total_amount, b.payment_status, b.is_cancelled,
-                   t.departure_time, bus.bus_name, bus.bus_number, r.source, r.destination, bp.name, bp.age, bp.gender, bp.seat_number
+                   t.departure_time, bus.bus_name, bus.bus_number, r.source, r.destination
             FROM bookings b
             JOIN trips t ON t.id = b.trip_id
             JOIN buses bus ON bus.id = t.bus_id
             JOIN routes r ON r.id = t.route_id
-            JOIN booking_passengers bp ON bp.booking_id = b.id
             WHERE t.operator_id = @operator_id";
 
         if (busId.HasValue)
@@ -1944,6 +2049,7 @@ public sealed class TransportService : ITransportService
         }
 
         using var reader = command.ExecuteReader();
+        var bookingsList = new List<OperatorBookingView>();
         var bookingsDict = new Dictionary<Guid, OperatorBookingView>();
 
         while (reader.Read())
@@ -1966,18 +2072,38 @@ public sealed class TransportService : ITransportService
                     IsCancelled = reader.GetBoolean(reader.GetOrdinal("is_cancelled"))
                 };
                 bookingsDict[bookingId] = booking;
+                bookingsList.Add(booking);
             }
+        }
+        reader.Close();
 
-            booking.Passengers.Add(new BookingPassenger
+        // Fetch passengers separately to avoid INNER JOIN dropping bookings without passengers
+        if (bookingsList.Count > 0)
+        {
+            var bookingIds = bookingsList.Select(b => b.BookingId).ToArray();
+            using var passengerCommand = new NpgsqlCommand(@"
+                SELECT booking_id, name, age, gender, seat_number
+                FROM booking_passengers
+                WHERE booking_id = ANY(@ids);", connection);
+            passengerCommand.Parameters.AddWithValue("ids", bookingIds);
+            using var passengerReader = passengerCommand.ExecuteReader();
+            while (passengerReader.Read())
             {
-                Name = reader.GetString(reader.GetOrdinal("name")),
-                Age = reader.GetInt32(reader.GetOrdinal("age")),
-                Gender = reader.GetString(reader.GetOrdinal("gender")),
-                SeatNumber = reader.GetInt32(reader.GetOrdinal("seat_number"))
-            });
+                var bookingId = passengerReader.GetGuid(0);
+                if (bookingsDict.TryGetValue(bookingId, out var booking))
+                {
+                    booking.Passengers.Add(new BookingPassenger
+                    {
+                        Name = passengerReader.GetString(1),
+                        Age = passengerReader.GetInt32(2),
+                        Gender = passengerReader.GetString(3),
+                        SeatNumber = passengerReader.GetInt32(4)
+                    });
+                }
+            }
         }
 
-        return bookingsDict.Values;
+        return bookingsList;
     }
 
     public OperatorRevenueResponse GetOperatorRevenue(Guid operatorId)
@@ -2078,7 +2204,7 @@ public sealed class TransportService : ITransportService
             RevenuePastMonth = revenuePastMonth,
             RevenueThisMonth = revenueThisMonth,
             TotalBookings = totalBookings,
-            ActiveBuses = busRevenue.Count,
+            ActiveBuses = busRevenue.Count(b => b.Revenue > 0 || b.Bookings > 0),
             ActiveTrips = activeTrips,
             BusRevenue = busRevenue
         };
@@ -2216,12 +2342,15 @@ public sealed class TransportService : ITransportService
 
         var tripId = Guid.NewGuid();
         var platformFee = GetCurrentPlatformFeeAmount(connection);
+        var tripTypeStr = request.TripType.ToString();
 
         using var insertCommand = new NpgsqlCommand(@"
             INSERT INTO trips
-            (id, operator_id, bus_id, route_id, departure_time, arrival_time, base_price, platform_fee, is_variable_price, pickup_points, drop_points, is_active, created_at)
+            (id, operator_id, bus_id, route_id, departure_time, arrival_time, base_price, platform_fee,
+             is_variable_price, pickup_points, drop_points, trip_type, days_of_week, is_active, created_at)
             VALUES
-            (@id, @operator_id, @bus_id, @route_id, @departure_time, @arrival_time, @base_price, @platform_fee, FALSE, @pickup_points, @drop_points, TRUE, @created_at);", connection);
+            (@id, @operator_id, @bus_id, @route_id, @departure_time, @arrival_time, @base_price, @platform_fee,
+             FALSE, @pickup_points, @drop_points, @trip_type, @days_of_week, TRUE, @created_at);", connection);
 
         insertCommand.Parameters.AddWithValue("id", tripId);
         insertCommand.Parameters.AddWithValue("operator_id", operatorId);
@@ -2233,6 +2362,8 @@ public sealed class TransportService : ITransportService
         insertCommand.Parameters.AddWithValue("platform_fee", platformFee);
         insertCommand.Parameters.AddWithValue("pickup_points", request.PickupPoints ?? (object)DBNull.Value);
         insertCommand.Parameters.AddWithValue("drop_points", request.DropPoints ?? (object)DBNull.Value);
+        insertCommand.Parameters.AddWithValue("trip_type", tripTypeStr);
+        insertCommand.Parameters.AddWithValue("days_of_week", request.DaysOfWeek ?? (object)DBNull.Value);
         insertCommand.Parameters.AddWithValue("created_at", DateTime.UtcNow);
         insertCommand.ExecuteNonQuery();
 
@@ -2249,7 +2380,9 @@ public sealed class TransportService : ITransportService
             SeatsAvailable = busRecord.Capacity,
             BasePrice = request.BasePrice,
             PlatformFee = platformFee,
-            IsVariablePrice = false
+            IsVariablePrice = false,
+            TripType = request.TripType,
+            DaysOfWeek = request.DaysOfWeek
         };
     }
 
@@ -2365,6 +2498,7 @@ public sealed class TransportService : ITransportService
     private sealed record BusRecord(
         Guid Id,
         Guid OperatorId,
+        string BusNumber,
         string BusName,
         int Capacity,
         bool IsTemporarilyUnavailable,
@@ -2378,6 +2512,7 @@ public sealed class TransportService : ITransportService
             {
                 BusId = Id,
                 OperatorId = OperatorId,
+                BusNumber = BusNumber,
                 BusName = BusName,
                 Capacity = Capacity,
                 IsTemporarilyUnavailable = IsTemporarilyUnavailable,

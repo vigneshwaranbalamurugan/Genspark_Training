@@ -1,0 +1,31 @@
+/* Login Component Styles */
+:host {
+  --primary-blue: #0056b3;
+  --primary-orange: #FF6600;
+  --accent-green: #10b981;
+  --text-dark: #333333;
+  --text-light: #666666;
+  --bg-light: #F2F2F2;
+}
+
+/* Smooth transitions */
+* {
+  transition: all 0.3s ease;
+}
+
+/* Focus states for accessibility */
+input:focus {
+  box-shadow: 0 0 0 3px rgba(5, 86, 179, 0.1);
+}
+
+button:focus {
+  outline: 2px solid var(--primary-blue);
+  outline-offset: 2px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  :host {
+    padding: 1rem;
+  }
+}

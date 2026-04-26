@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using server.Models;
 using server.Services;
@@ -6,13 +7,43 @@ namespace server.Controllers;
 
 [ApiController]
 [Route("api/admin")]
+[Authorize(Roles = "Admin")]
 public sealed class AdminController : ControllerBase
 {
     private readonly ITransportService transportService;
+    private readonly IJwtService jwtService;
+    private readonly IConfiguration configuration;
 
-    public AdminController(ITransportService transportService)
+    public AdminController(ITransportService transportService, IJwtService jwtService, IConfiguration configuration)
     {
         this.transportService = transportService;
+        this.jwtService = jwtService;
+        this.configuration = configuration;
+    }
+
+    [AllowAnonymous]
+    [HttpPost("login")]
+    public ActionResult<AdminLoginResponse> Login([FromBody] AdminLoginRequest request)
+    {
+        var configuredEmail = configuration["AdminCredentials:Email"] ?? "admin@system.com";
+        var configuredPassword = configuration["AdminCredentials:Password"] ?? "Admin@123";
+
+        var normalizedInputEmail = request.Email.Trim().ToLowerInvariant();
+        var normalizedConfiguredEmail = configuredEmail.Trim().ToLowerInvariant();
+
+        if (!string.Equals(normalizedInputEmail, normalizedConfiguredEmail, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(request.Password, configuredPassword, StringComparison.Ordinal))
+        {
+            return Unauthorized(new { message = "Invalid admin credentials." });
+        }
+
+        return Ok(new AdminLoginResponse
+        {
+            Email = normalizedConfiguredEmail,
+            JwtToken = jwtService.GenerateToken(normalizedConfiguredEmail, UserRole.Admin.ToString()),
+            Role = UserRole.Admin.ToString(),
+            Message = "Admin login successful"
+        });
     }
 
     [HttpGet("operators")]
@@ -77,6 +108,12 @@ public sealed class AdminController : ControllerBase
     public ActionResult<IEnumerable<RouteResponse>> Routes()
     {
         return Ok(transportService.GetRoutes());
+    }
+
+    [HttpGet("buses")]
+    public ActionResult<IEnumerable<BusResponse>> GetBuses()
+    {
+        return Ok(transportService.GetAllBuses());
     }
 
     [HttpPost("buses/{busId:guid}/approval")]

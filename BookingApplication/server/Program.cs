@@ -1,3 +1,7 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+
 var builder = WebApplication.CreateBuilder(args);
 var postgreSqlConnection = builder.Configuration.GetConnectionString("PostgreSql");
 
@@ -8,10 +12,55 @@ if (string.IsNullOrWhiteSpace(postgreSqlConnection))
 
 server.Data.PostgreSqlDatabaseBootstrapper.EnsureDatabaseExists(postgreSqlConnection);
 
+// Add CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAngularApp", builder =>
+    {
+        builder.WithOrigins("http://localhost:4200", "https://localhost:4200")
+               .AllowAnyMethod()
+               .AllowAnyHeader()
+               .AllowCredentials();
+    });
+});
+
+// Add JWT Authentication
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "your-secret-key-change-this-in-production-at-least-32-characters";
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "BookingApp";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "BookingAppUsers";
+
+builder.Services
+    .AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtKey)),
+            ValidateIssuer = true,
+            ValidIssuer = jwtIssuer,
+            ValidateAudience = true,
+            ValidAudience = jwtAudience,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
+        };
+    });
+
+builder.Services.AddAuthorization();
+
 // Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddControllers();
+
+// Register JWT Service
+builder.Services.AddSingleton<server.Services.IJwtService>(sp =>
+{
+    return new server.Services.JwtService(jwtKey, jwtIssuer, jwtAudience);
+});
 
 builder.Services.AddSingleton<server.Services.IRegistrationService>(sp =>
 {
@@ -47,31 +96,10 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseCors("AllowAngularApp");
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
-
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}

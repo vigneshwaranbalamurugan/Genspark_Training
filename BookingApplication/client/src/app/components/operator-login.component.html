@@ -1,0 +1,32 @@
+<div class="auth-shell">
+  <div class="auth-card">
+    <h1>Operator Sign In</h1>
+    <p>Manage buses, routes, bookings, and revenue.</p>
+
+    @if (errorMessage()) {
+      <div class="error">{{ errorMessage() }}</div>
+    }
+
+    <form [formGroup]="form" (ngSubmit)="onSubmit()">
+      <label>
+        Email
+        <input type="email" formControlName="email" placeholder="operator@company.com" />
+      </label>
+      @if (submitted() && f['email'].errors) {
+        <small class="error-text">Valid email is required.</small>
+      }
+
+      <label>
+        Password
+        <input type="password" formControlName="password" placeholder="********" />
+      </label>
+      @if (submitted() && f['password'].errors) {
+        <small class="error-text">Password must be at least 8 characters.</small>
+      }
+
+      <button type="submit" [disabled]="loading()">
+        @if (loading()) { Signing in... } @else { Sign In as Operator }
+      </button>
+    </form>
+  </div>
+</div>

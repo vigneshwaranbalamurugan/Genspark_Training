@@ -1,0 +1,92 @@
+:host {
+  --primary-blue: #0056b3;
+  --primary-orange: #FF6600;
+  --accent-green: #10b981;
+  --text-dark: #333333;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  opacity: 0.5;
+  transition: opacity 0.3s ease;
+}
+
+.step.active {
+  opacity: 1;
+}
+
+.step-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.step.active .step-circle {
+  background: var(--accent-green);
+  color: white;
+}
+
+.step-label {
+  font-size: 0.875rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.step.active .step-label {
+  color: var(--accent-green);
+  font-weight: 600;
+}
+
+.progress-bar {
+  height: 4px;
+  background: #e5e7eb;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-green), var(--primary-blue));
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease;
+}
+
+.letter-spacing {
+  letter-spacing: 0.5em;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .step {
+    transform: scale(0.85);
+  }
+
+  .step-label {
+    font-size: 0.75rem;
+  }
+}
