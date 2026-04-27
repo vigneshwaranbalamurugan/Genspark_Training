@@ -21,6 +21,7 @@ import { environment } from '../../environments/environment';
 })
 export class BookingComponent implements OnInit {
   readonly tripId = signal<string>('');
+  readonly travelDate = signal<string>('');
   readonly seatLayout = signal<SeatLayoutResponse | null>(null);
   readonly loading = signal(false);
   readonly actionLoading = signal(false);
@@ -61,12 +62,17 @@ export class BookingComponent implements OnInit {
     }
 
     this.tripId.set(tripId);
+    this.travelDate.set(this.route.snapshot.queryParamMap.get('date') || '');
     this.fetchLayout();
   }
 
   fetchLayout(): void {
+    if (!this.travelDate()) {
+      this.errorMessage.set('Travel date is required.');
+      return;
+    }
     this.loading.set(true);
-    this.bookingService.getSeatLayout(this.tripId()).subscribe({
+    this.bookingService.getSeatLayout(this.tripId(), this.travelDate()).subscribe({
       next: (layout) => {
         this.seatLayout.set(layout);
         this.loading.set(false);
@@ -149,7 +155,7 @@ export class BookingComponent implements OnInit {
   lockSeats(): void {
     const user = this.currentUser;
     if (!user) {
-      this.router.navigate(['/login'], { queryParams: { redirect: `/book/${this.tripId()}` } });
+      this.router.navigate(['/login'], { queryParams: { redirect: `/book/${this.tripId()}?date=${this.travelDate()}` } });
       return;
     }
 
@@ -161,6 +167,7 @@ export class BookingComponent implements OnInit {
     this.actionLoading.set(true);
     this.bookingService.lockSeats({
       tripId: this.tripId(),
+      travelDate: this.travelDate(),
       userEmail: user.email,
       seatNumbers: this.selectedSeats()
     }).subscribe({
@@ -195,6 +202,7 @@ export class BookingComponent implements OnInit {
     this.actionLoading.set(true);
     this.bookingService.createBooking({
       lockId: lock.lockId,
+      travelDate: this.travelDate(),
       userEmail: user.email,
       paymentMode,
       passengers
@@ -220,7 +228,14 @@ export class BookingComponent implements OnInit {
 
     this.bookingService.getTicket(booking.bookingId, user.email).subscribe({
       next: (ticket) => {
-        window.open(`${environment.serverBaseUrl}${ticket.ticketUrl}`, '_blank');
+        const downloadUrl = `${environment.serverBaseUrl}${ticket.ticketUrl}?userEmail=${encodeURIComponent(user.email)}`;
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.target = '_blank';
+        link.download = '';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
       },
       error: (error) => {
         this.errorMessage.set(error.message);

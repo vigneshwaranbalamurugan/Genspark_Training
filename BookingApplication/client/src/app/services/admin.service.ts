@@ -59,11 +59,19 @@ export class AdminService {
     return this.http.post(`${this.apiUrl}/admin/buses/${busId}/approval`, { approve, comment: comment || '' });
   }
 
+  disableBus(busId: string, reason: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/admin/buses/${busId}/disable`, { reason });
+  }
+
   setPlatformFee(feeAmount: number, description?: string | null): Observable<any> {
     return this.http.post(`${this.apiUrl}/admin/platform-fee`, { feeAmount, description: description || '' });
   }
 
   getPlatformFee(): Observable<any> {
     return this.http.get(`${this.apiUrl}/admin/platform-fee`);
+  }
+
+  getRevenue(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/admin/revenue`);
   }
 }

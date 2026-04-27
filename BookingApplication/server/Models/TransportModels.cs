@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace server.Models;
 
@@ -51,6 +52,15 @@ public sealed class TripSummary
     public bool IsVariablePrice { get; set; }
     public TripType TripType { get; set; } = TripType.OneTime;
     public string? DaysOfWeek { get; set; }
+    public bool IsActive { get; set; }
+    
+    // New fields for daily tracking
+    public DateOnly? StartDate { get; set; }
+    public DateOnly? EndDate { get; set; }
+    public int ArrivalDayOffset { get; set; }
+
+    public List<PickupDropPointResponse> PickupPoints { get; set; } = [];
+    public List<PickupDropPointResponse> DropPoints { get; set; } = [];
 }
 
 public sealed class TripSearchResponse
@@ -71,6 +81,9 @@ public sealed class LockSeatsRequest
 {
     [Required]
     public Guid TripId { get; set; }
+
+    [Required]
+    public DateOnly TravelDate { get; set; }
 
     [Required]
     [EmailAddress]
@@ -108,6 +121,9 @@ public sealed class CreateBookingRequest
 {
     [Required]
     public Guid LockId { get; set; }
+
+    [Required]
+    public DateOnly TravelDate { get; set; }
 
     [Required]
     [EmailAddress]
@@ -211,6 +227,10 @@ public sealed class BusRequest
 {
     [Required]
     public Guid OperatorId { get; set; }
+
+    [Required]
+    [StringLength(50)]
+    public string BusNumber { get; set; } = string.Empty;
 
     [Required]
     [StringLength(80)]
@@ -353,12 +373,15 @@ public sealed class SeatWithGenderInfo
 public sealed class SeatLayoutResponse
 {
     public Guid TripId { get; set; }
+    public DateOnly TravelDate { get; set; }
     public string BusName { get; set; } = string.Empty;
     public string LayoutName { get; set; } = string.Empty;
     public int Capacity { get; set; }
     public int SeatsAvailableLeft { get; set; }
     public Dictionary<int, SeatWithGenderInfo> Seats { get; set; } = [];
     public List<int> LadiesSeatsAvailable { get; set; } = [];
+    public List<PickupDropPointResponse> PickupPoints { get; set; } = [];
+    public List<PickupDropPointResponse> DropPoints { get; set; } = [];
 }
 
 public sealed class BookingsHistoryFilter
@@ -376,6 +399,7 @@ public sealed class EnhancedBookingResponse
     public Guid BookingId { get; set; }
     public string Pnr { get; set; } = string.Empty;
     public Guid TripId { get; set; }
+    public DateOnly TravelDate { get; set; }
     public string BusName { get; set; } = string.Empty;
     public string Source { get; set; } = string.Empty;
     public string Destination { get; set; } = string.Empty;
@@ -543,6 +567,14 @@ public sealed class PlatformFeeResponse
     public DateTime UpdatedAt { get; set; }
 }
 
+public sealed class AdminRevenueResponse
+{
+    public decimal TotalPlatformFeeRevenue { get; set; }
+    public decimal PlatformFeeRevenueThisMonth { get; set; }
+    public decimal PlatformFeeRevenuePastMonth { get; set; }
+    public int TotalBookings { get; set; }
+}
+
 public sealed class OperatorBookingView
 {
     public Guid BookingId { get; set; }
@@ -588,9 +620,20 @@ public sealed class PreferredRouteRequest
 
 public sealed class PreferredRouteResponse
 {
+    [JsonPropertyName("routeId")]
     public Guid RouteId { get; set; }
+
+    [JsonPropertyName("source")]
     public string Source { get; set; } = string.Empty;
+
+    [JsonPropertyName("destination")]
     public string Destination { get; set; } = string.Empty;
+
+    [JsonPropertyName("pickupPoints")]
+    public List<PickupDropPointResponse> PickupPoints { get; set; } = new List<PickupDropPointResponse>();
+
+    [JsonPropertyName("dropPoints")]
+    public List<PickupDropPointResponse> DropPoints { get; set; } = new List<PickupDropPointResponse>();
 }
 
 public sealed class PickupDropPointRequest
@@ -610,6 +653,7 @@ public sealed class PickupDropPointResponse
     public string Location { get; set; } = string.Empty;
     public string? Address { get; set; }
     public bool IsDefault { get; set; }
+    public bool IsPickup { get; set; }
 }
 
 public sealed class TripCreateRequestWithDetails
@@ -623,22 +667,31 @@ public sealed class TripCreateRequestWithDetails
     [Required]
     public Guid RouteId { get; set; }
 
-    [Required]
-    public DateTime DepartureTime { get; set; }
+    // For OneTime trips
+    public DateTime? DepartureDateTime { get; set; }
+    public DateTime? ArrivalDateTime { get; set; }
+
+    // For Daily trips
+    public DateOnly? StartDate { get; set; }
+    public DateOnly? EndDate { get; set; }
+    public TimeOnly? DepartureTime { get; set; }
+    public TimeOnly? ArrivalTime { get; set; }
 
     [Required]
-    public DateTime ArrivalTime { get; set; }
-
-    [Range(1, 10000)]
     public decimal BasePrice { get; set; }
 
     public string? PickupPoints { get; set; }
-
     public string? DropPoints { get; set; }
 
-    /// <summary>OneTime or Daily</summary>
     public TripType TripType { get; set; } = TripType.OneTime;
 
     /// <summary>Comma-separated days for daily trips, e.g. "Mon,Tue,Wed"</summary>
     public string? DaysOfWeek { get; set; }
+}
+
+public sealed class DisableBusRequest
+{
+    [Required]
+    [StringLength(200)]
+    public string Reason { get; set; } = string.Empty;
 }

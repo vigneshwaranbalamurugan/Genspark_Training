@@ -96,15 +96,17 @@ export class OperatorService {
 
   addPickupPoint(operatorId: string, routeId: string, pointName: string, address?: string | null): Observable<any> {
     return this.http.post(`${this.apiUrl}/operator/${operatorId}/routes/${routeId}/pickup-points`, {
-      pointName,
-      address: address || 'Default pickup address'
+      location: pointName,
+      address: address || 'Default pickup address',
+      isDefault: true
     });
   }
 
   addDropPoint(operatorId: string, routeId: string, pointName: string, address?: string | null): Observable<any> {
     return this.http.post(`${this.apiUrl}/operator/${operatorId}/routes/${routeId}/drop-points`, {
-      pointName,
-      address: address || 'Default drop address'
+      location: pointName,
+      address: address || 'Default drop address',
+      isDefault: true
     });
   }
 
@@ -114,5 +116,13 @@ export class OperatorService {
 
   createTrip(operatorId: string, payload: any): Observable<any> {
     return this.http.post(`${this.apiUrl}/operator/${operatorId}/trips/create`, payload);
+  }
+
+  getTrips(operatorId: string): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}/operator/${operatorId}/trips`);
+  }
+
+  deleteTrip(operatorId: string, tripId: string): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/operator/${operatorId}/trips/${tripId}`);
   }
 }

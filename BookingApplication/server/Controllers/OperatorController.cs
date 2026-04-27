@@ -189,7 +189,7 @@ public sealed class OperatorController : ControllerBase
     }
 
     [HttpGet("{operatorId:guid}/preferred-routes")]
-    public ActionResult<IEnumerable<PreferredRouteResponse>> GetPreferredRoutes([FromRoute] Guid operatorId)
+    public ActionResult<List<PreferredRouteResponse>> GetPreferredRoutes([FromRoute] Guid operatorId)
     {
         return Ok(transportService.GetOperatorPreferredRoutes(operatorId));
     }
@@ -262,6 +262,26 @@ public sealed class OperatorController : ControllerBase
         catch (InvalidOperationException exception)
         {
             return BadRequest(new { message = exception.Message });
+        }
+    }
+
+    [HttpGet("{operatorId:guid}/trips")]
+    public ActionResult<IEnumerable<TripSummary>> GetTrips([FromRoute] Guid operatorId)
+    {
+        return Ok(transportService.GetOperatorTrips(operatorId));
+    }
+
+    [HttpDelete("{operatorId:guid}/trips/{tripId:guid}")]
+    public IActionResult DeleteTrip([FromRoute] Guid operatorId, [FromRoute] Guid tripId)
+    {
+        try
+        {
+            transportService.DeleteTrip(operatorId, tripId);
+            return NoContent();
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
         }
     }
 }

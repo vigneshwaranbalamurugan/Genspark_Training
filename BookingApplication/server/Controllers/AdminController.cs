@@ -129,6 +129,19 @@ public sealed class AdminController : ControllerBase
         }
     }
 
+    [HttpPost("buses/{busId:guid}/disable")]
+    public ActionResult<BusResponse> DisableBus([FromRoute] Guid busId, [FromBody] DisableBusRequest request)
+    {
+        try
+        {
+            return Ok(transportService.DisableBus(busId, request));
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
+        }
+    }
+
     [HttpGet("notifications/{recipientEmail}")]
     public ActionResult<IEnumerable<NotificationResponse>> Notifications([FromRoute] string recipientEmail)
     {
@@ -152,5 +165,11 @@ public sealed class AdminController : ControllerBase
     public ActionResult<PlatformFeeResponse> GetPlatformFee()
     {
         return Ok(transportService.GetCurrentPlatformFee());
+    }
+
+    [HttpGet("revenue")]
+    public ActionResult<AdminRevenueResponse> GetRevenue()
+    {
+        return Ok(transportService.GetAdminRevenue());
     }
 }

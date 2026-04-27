@@ -19,6 +19,7 @@ export class AdminDashboardComponent implements OnInit {
   routes = signal<any[]>([]);
   buses = signal<any[]>([]);
   platformFee = signal<any | null>(null);
+  revenue = signal<any | null>(null);
   
   errorMessage = signal<string | null>(null);
   successMessage = signal<string | null>(null);
@@ -106,6 +107,11 @@ export class AdminDashboardComponent implements OnInit {
       },
       error: (err) => this.errorMessage.set(err.message)
     });
+
+    this.adminService.getRevenue().subscribe({
+      next: (data) => this.revenue.set(data),
+      error: (err) => this.errorMessage.set(err.message)
+    });
   }
 
   // Operator Actions
@@ -147,6 +153,19 @@ export class AdminDashboardComponent implements OnInit {
     });
   }
 
+  disableBus(busId: string) {
+    const reason = prompt('Reason for disabling this bus:');
+    if (reason === null) return;
+    
+    this.adminService.disableBus(busId, reason || 'Admin action').subscribe({
+      next: () => {
+        this.successMessage.set('Bus disabled successfully.');
+        this.loadAll();
+      },
+      error: (err) => this.errorMessage.set(err.message)
+    });
+  }
+
   // Route Actions
   addRoute(): void {
     if (!this.routeForm.source || !this.routeForm.destination) {
@@ -181,5 +200,29 @@ export class AdminDashboardComponent implements OnInit {
   logout(): void {
     this.authService.logout();
     this.router.navigate(['/']);
+  }
+
+  getStatusClass(status: any): string {
+    if (status === undefined || status === null) return 'pending';
+    const s = status.toString().toLowerCase();
+    if (s === '1' || s === 'pending') return 'pending';
+    if (s === '2' || s === 'approved') return 'approved';
+    if (s === '3' || s === 'rejected') return 'rejected';
+    return s;
+  }
+
+  getStatusText(status: any): string {
+    if (status === undefined || status === null) return 'Pending';
+    const s = status.toString().toLowerCase();
+    if (s === '1' || s === 'pending') return 'Pending';
+    if (s === '2' || s === 'approved') return 'Approved';
+    if (s === '3' || s === 'rejected') return 'Rejected';
+    return status;
+  }
+
+  isPending(status: any): boolean {
+    if (status === undefined || status === null) return true;
+    const s = status.toString().toLowerCase();
+    return s === '1' || s === 'pending';
   }
 }

@@ -232,6 +232,13 @@
   background: #f1f5f9;
 }
 
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 200px;
+}
+
 /* Badges */
 .badge {
   padding: 6px 12px;

@@ -23,6 +23,16 @@ export interface TripSummary {
   basePrice: number;
   platformFee: number;
   isVariablePrice: boolean;
+  pickupPoints: PickupDropPointResponse[];
+  dropPoints: PickupDropPointResponse[];
+}
+
+export interface PickupDropPointResponse {
+  pointId: string;
+  location: string;
+  address?: string | null;
+  isDefault: boolean;
+  isPickup: boolean;
 }
 
 export interface TripSearchResponse {
@@ -39,16 +49,20 @@ export interface SeatInfo {
 
 export interface SeatLayoutResponse {
   tripId: string;
+  travelDate: string;
   busName: string;
   layoutName: string;
   capacity: number;
   seatsAvailableLeft: number;
   seats: Record<number, SeatInfo>;
   ladiesSeatsAvailable: number[];
+  pickupPoints: PickupDropPointResponse[];
+  dropPoints: PickupDropPointResponse[];
 }
 
 export interface LockSeatsRequest {
   tripId: string;
+  travelDate: string;
   userEmail: string;
   seatNumbers: number[];
 }
@@ -69,6 +83,7 @@ export interface PassengerRequest {
 
 export interface CreateBookingRequest {
   lockId: string;
+  travelDate: string;
   userEmail: string;
   paymentMode: number;
   passengers: PassengerRequest[];
@@ -91,6 +106,7 @@ export interface EnhancedBookingResponse {
   bookingId: string;
   pnr: string;
   tripId: string;
+  travelDate: string;
   busName: string;
   source: string;
   destination: string;
@@ -152,8 +168,10 @@ export class BookingService {
     return this.http.get<TripSearchResponse>(`${this.apiUrl}/public/buses/search-fuzzy`, { params });
   }
 
-  getSeatLayout(tripId: string): Observable<SeatLayoutResponse> {
-    return this.http.get<SeatLayoutResponse>(`${this.apiUrl}/public/trips/${tripId}/layout`);
+  getSeatLayout(tripId: string, travelDate: string): Observable<SeatLayoutResponse> {
+    return this.http.get<SeatLayoutResponse>(`${this.apiUrl}/public/trips/${tripId}/layout`, {
+      params: { travelDate }
+    });
   }
 
   lockSeats(request: LockSeatsRequest): Observable<SeatLockResponse> {

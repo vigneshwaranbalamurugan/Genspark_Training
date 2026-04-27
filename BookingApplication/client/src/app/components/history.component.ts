@@ -72,7 +72,16 @@ export class HistoryComponent implements OnInit {
     }
 
     this.bookingService.getTicket(bookingId, user.email).subscribe({
-      next: (ticket) => window.open(`${environment.serverBaseUrl}${ticket.ticketUrl}`, '_blank'),
+      next: (ticket) => {
+        const downloadUrl = `${environment.serverBaseUrl}${ticket.ticketUrl}?userEmail=${encodeURIComponent(user.email)}`;
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.target = '_blank';
+        link.download = ''; // The server will provide the filename via Content-Disposition
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      },
       error: (error) => this.errorMessage.set(error.message)
     });
   }

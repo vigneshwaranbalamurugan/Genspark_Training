@@ -78,6 +78,13 @@
           <article class="stat-card">
             <div class="stat-icon">💰</div>
             <div class="stat-details">
+              <h3>Platform Fee Revenue</h3>
+              <strong>Rs {{ revenue()?.totalPlatformFeeRevenue || 0 }}</strong>
+            </div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-icon">⚙️</div>
+            <div class="stat-details">
               <h3>Current Fee</h3>
               <strong>Rs {{ platformFee()?.amount || 0 }}</strong>
             </div>
@@ -110,15 +117,15 @@
                     <td>{{ op.companyName }}</td>
                     <td>{{ op.email }}</td>
                     <td>
-                      <span class="badge" [ngClass]="op.approvalStatus.toLowerCase()">
-                        {{ op.approvalStatus }}
+                      <span class="badge" [ngClass]="getStatusClass(op.approvalStatus)">
+                        {{ getStatusText(op.approvalStatus) }}
                       </span>
                       @if (op.isDisabled) {
                         <span class="badge danger">Disabled</span>
                       }
                     </td>
                     <td class="actions">
-                      @if (op.approvalStatus === 'Pending') {
+                      @if (isPending(op.approvalStatus)) {
                         <button class="btn-small success" (click)="updateOperatorStatus(op.operatorId, true)">Approve</button>
                         <button class="btn-small danger" (click)="updateOperatorStatus(op.operatorId, false)">Reject</button>
                       }
@@ -152,7 +159,7 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>Bus Name</th>
+                  <th>Bus Details</th>
                   <th>Capacity</th>
                   <th>Status</th>
                   <th>Actions</th>
@@ -161,7 +168,10 @@
               <tbody>
                 @for (bus of filteredBuses(); track bus.busId) {
                   <tr>
-                    <td>{{ bus.busName }}</td>
+                    <td>
+                      <strong>{{ bus.busNumber }}</strong><br>
+                      <small>{{ bus.busName }}</small>
+                    </td>
                     <td>{{ bus.capacity }}</td>
                     <td>
                       @if (bus.isApproved) {
@@ -177,6 +187,9 @@
                       @if (!bus.isApproved) {
                         <button class="btn-small success" (click)="updateBusStatus(bus.busId, true)">Approve</button>
                         <button class="btn-small danger" (click)="updateBusStatus(bus.busId, false)">Reject</button>
+                      }
+                      @if (bus.isApproved && bus.isActive) {
+                        <button class="btn-small danger" (click)="disableBus(bus.busId)">Disable</button>
                       }
                     </td>
                   </tr>

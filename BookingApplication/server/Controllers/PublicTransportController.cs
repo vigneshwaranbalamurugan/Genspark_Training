@@ -34,11 +34,11 @@ public sealed class PublicTransportController : ControllerBase
     }
 
     [HttpGet("trips/{tripId:guid}/seats")]
-    public ActionResult<SeatAvailabilityResponse> Seats([FromRoute] Guid tripId)
+    public ActionResult<SeatAvailabilityResponse> Seats([FromRoute] Guid tripId, [FromQuery] DateOnly travelDate)
     {
         try
         {
-            return Ok(transportService.GetSeatAvailability(tripId));
+            return Ok(transportService.GetSeatAvailability(tripId, travelDate));
         }
         catch (KeyNotFoundException exception)
         {
@@ -58,11 +58,11 @@ public sealed class PublicTransportController : ControllerBase
     }
 
     [HttpGet("trips/{tripId:guid}/layout")]
-    public ActionResult<SeatLayoutResponse> GetSeatLayout([FromRoute] Guid tripId)
+    public ActionResult<SeatLayoutResponse> GetSeatLayout([FromRoute] Guid tripId, [FromQuery] DateOnly travelDate)
     {
         try
         {
-            return Ok(transportService.GetSeatLayout(tripId));
+            return Ok(transportService.GetSeatLayout(tripId, travelDate));
         }
         catch (KeyNotFoundException exception)
         {

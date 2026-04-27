@@ -1,0 +1,56 @@
+<div class="auth-shell">
+  <div class="auth-card">
+    <h1>Register as Operator</h1>
+    <p>Join our platform to manage your fleet and bookings.</p>
+
+    @if (errorMessage()) {
+      <div class="error">{{ errorMessage() }}</div>
+    }
+
+    @if (successMessage()) {
+      <div class="success">{{ successMessage() }}</div>
+    }
+
+    <form [formGroup]="form" (ngSubmit)="onSubmit()">
+      <label>
+        Company Name
+        <input type="text" formControlName="companyName" placeholder="Fleet Express" />
+      </label>
+      @if (submitted() && f['companyName'].errors) {
+        <small class="error-text">Company name is required.</small>
+      }
+
+      <label>
+        Email
+        <input type="email" formControlName="email" placeholder="contact@company.com" />
+      </label>
+      @if (submitted() && f['email'].errors) {
+        <small class="error-text">Valid email is required.</small>
+      }
+
+      <label>
+        Password
+        <input type="password" formControlName="password" placeholder="********" />
+      </label>
+      @if (submitted() && f['password'].errors) {
+        <small class="error-text">Password must be at least 8 characters.</small>
+      }
+
+      <label>
+        Confirm Password
+        <input type="password" formControlName="confirmPassword" placeholder="********" />
+      </label>
+      @if (submitted() && form.errors?.['mismatch']) {
+        <small class="error-text">Passwords do not match.</small>
+      }
+
+      <button type="submit" [disabled]="loading()">
+        @if (loading()) { Registering... } @else { Register Company }
+      </button>
+
+      <div class="footer">
+        Already registered? <a routerLink="/operator/login">Sign In</a>
+      </div>
+    </form>
+  </div>
+</div>

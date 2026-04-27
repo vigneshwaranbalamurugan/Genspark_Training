@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Identity;
 using Npgsql;
 using server.Models;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
 
 namespace server.Services;
 
@@ -32,7 +35,7 @@ public sealed class TransportService : ITransportService
         return response;
     }
 
-    public SeatAvailabilityResponse GetSeatAvailability(Guid tripId)
+    public SeatAvailabilityResponse GetSeatAvailability(Guid tripId, DateOnly travelDate)
     {
         DeleteExpiredLocks();
 
@@ -53,7 +56,7 @@ public sealed class TransportService : ITransportService
         var capacity = reader.GetInt32(reader.GetOrdinal("capacity"));
         reader.Close();
 
-        var reservedSeats = GetReservedSeatNumbers(connection, tripId);
+        var reservedSeats = GetReservedSeatNumbers(connection, tripId, travelDate);
         var availableSeats = Enumerable.Range(1, capacity).Where(seat => !reservedSeats.Contains(seat)).ToList();
 
         return new SeatAvailabilityResponse
@@ -75,7 +78,7 @@ public sealed class TransportService : ITransportService
         }
 
         using var connection = OpenConnection();
-        var availability = GetSeatAvailability(request.TripId);
+        var availability = GetSeatAvailability(request.TripId, request.TravelDate);
         var notAvailable = request.SeatNumbers.Where(seat => !availability.AvailableSeatNumbers.Contains(seat)).ToList();
         if (notAvailable.Count > 0)
         {
@@ -86,11 +89,12 @@ public sealed class TransportService : ITransportService
         var lockExpiresAt = DateTime.UtcNow.Add(SeatLockDuration);
 
         using var command = new NpgsqlCommand(@"
-            INSERT INTO seat_locks (id, trip_id, user_email, seat_numbers, expires_at, created_at)
-            VALUES (@id, @trip_id, @user_email, @seat_numbers, @expires_at, @created_at);", connection);
+            INSERT INTO seat_locks (id, trip_id, travel_date, user_email, seat_numbers, expires_at, created_at)
+            VALUES (@id, @trip_id, @travel_date, @user_email, @seat_numbers, @expires_at, @created_at);", connection);
 
         command.Parameters.AddWithValue("id", lockId);
         command.Parameters.AddWithValue("trip_id", request.TripId);
+        command.Parameters.AddWithValue("travel_date", request.TravelDate.ToDateTime(TimeOnly.MinValue));
         command.Parameters.AddWithValue("user_email", NormalizeEmail(request.UserEmail));
         command.Parameters.AddWithValue("seat_numbers", request.SeatNumbers.ToArray());
         command.Parameters.AddWithValue("expires_at", lockExpiresAt);
@@ -169,21 +173,22 @@ public sealed class TransportService : ITransportService
 
         var bookingId = Guid.NewGuid();
         var pnr = $"BT{DateTime.UtcNow:yyyyMMdd}{Random.Shared.Next(1000, 9999)}";
-        var ticketUrl = $"/api/bookings/{bookingId}/ticket";
+        var ticketUrl = $"/api/bookings/{bookingId}/ticket/download";
 
         using var transaction = connection.BeginTransaction();
 
         using (var bookingCommand = new NpgsqlCommand(@"
             INSERT INTO bookings
-            (id, pnr, trip_id, user_email, seat_numbers, total_amount, payment_mode, payment_status,
+            (id, pnr, trip_id, travel_date, user_email, seat_numbers, total_amount, payment_mode, payment_status,
              ticket_download_url, mail_status, is_cancelled, refund_amount, created_at)
             VALUES
-            (@id, @pnr, @trip_id, @user_email, @seat_numbers, @total_amount, @payment_mode, @payment_status,
+            (@id, @pnr, @trip_id, @travel_date, @user_email, @seat_numbers, @total_amount, @payment_mode, @payment_status,
              @ticket_download_url, @mail_status, FALSE, 0, @created_at);", connection, transaction))
         {
             bookingCommand.Parameters.AddWithValue("id", bookingId);
             bookingCommand.Parameters.AddWithValue("pnr", pnr);
             bookingCommand.Parameters.AddWithValue("trip_id", tripId);
+            bookingCommand.Parameters.AddWithValue("travel_date", request.TravelDate.ToDateTime(TimeOnly.MinValue));
             bookingCommand.Parameters.AddWithValue("user_email", userEmail);
             bookingCommand.Parameters.AddWithValue("seat_numbers", seatNumbers.ToArray());
             bookingCommand.Parameters.AddWithValue("total_amount", totalAmount);
@@ -322,7 +327,7 @@ public sealed class TransportService : ITransportService
                 TotalAmount = reader.GetDecimal(reader.GetOrdinal("total_amount")),
                 RefundAmount = reader.GetDecimal(reader.GetOrdinal("refund_amount")),
                 IsCancelled = reader.GetBoolean(reader.GetOrdinal("is_cancelled")),
-                TicketDownloadUrl = reader.GetString(reader.GetOrdinal("ticket_download_url")),
+                TicketDownloadUrl = $"/api/bookings/{reader.GetGuid(reader.GetOrdinal("id"))}/ticket/download",
                 MailStatus = reader.GetString(reader.GetOrdinal("mail_status")),
                 PaymentStatus = reader.GetString(reader.GetOrdinal("payment_status"))
             });
@@ -630,14 +635,15 @@ public sealed class TransportService : ITransportService
         var busId = Guid.NewGuid();
         using var command = new NpgsqlCommand(@"
             INSERT INTO buses
-            (id, operator_id, bus_name, capacity, layout_name, layout_json, is_temporarily_unavailable,
+            (id, operator_id, bus_name, bus_number, capacity, layout_name, layout_json, is_temporarily_unavailable,
              is_approved, is_active, created_at)
             VALUES
-            (@id, @operator_id, @bus_name, @capacity, @layout_name, @layout_json, FALSE,
+            (@id, @operator_id, @bus_name, @bus_number, @capacity, @layout_name, @layout_json, FALSE,
              FALSE, TRUE, @created_at);", connection);
         command.Parameters.AddWithValue("id", busId);
         command.Parameters.AddWithValue("operator_id", request.OperatorId);
         command.Parameters.AddWithValue("bus_name", request.BusName.Trim());
+        command.Parameters.AddWithValue("bus_number", request.BusNumber.Trim());
         command.Parameters.AddWithValue("capacity", request.Capacity);
         command.Parameters.AddWithValue("layout_name", request.LayoutName.Trim());
         command.Parameters.AddWithValue("layout_json", request.LayoutJson ?? (object)DBNull.Value);
@@ -781,6 +787,24 @@ public sealed class TransportService : ITransportService
         command.ExecuteNonQuery();
     }
 
+    public BusResponse DisableBus(Guid busId, DisableBusRequest request)
+    {
+        using var connection = OpenConnection();
+        var bus = GetBus(connection, busId);
+
+        using var command = new NpgsqlCommand(@"
+            UPDATE buses
+            SET is_active = FALSE
+            WHERE id = @id;", connection);
+        command.Parameters.AddWithValue("id", busId);
+        command.ExecuteNonQuery();
+
+        CreateNotification(connection, null, "admin@system.com", "Bus disabled by Admin", $"Bus '{bus.BusName}' was disabled by admin. Reason: {request.Reason}");
+        CreateNotification(connection, null, bus.OperatorId.ToString(), "Bus disabled", $"Your bus '{bus.BusName}' was disabled by admin. Reason: {request.Reason}");
+
+        return (bus with { IsActive = false }).ToResponse();
+    }
+
     public TripSummary AddTrip(TripCreateRequest request)
     {
         using var connection = OpenConnection();
@@ -862,7 +886,10 @@ public sealed class TransportService : ITransportService
 
         decimal totalRevenue;
         using (var revenueCommand = new NpgsqlCommand(@"
-            SELECT COALESCE(SUM(b.total_amount), 0)
+            SELECT COALESCE(SUM(
+                (CASE WHEN t.is_variable_price = TRUE THEN t.base_price * 1.10 ELSE t.base_price END)
+                * COALESCE(array_length(b.seat_numbers, 1), 0)
+            ), 0)
             FROM bookings b
             JOIN trips t ON t.id = b.trip_id
             WHERE t.operator_id = @operator_id AND b.is_cancelled = FALSE;", connection))
@@ -878,6 +905,62 @@ public sealed class TransportService : ITransportService
             ActiveTrips = activeTrips,
             TotalBookings = totalBookings,
             TotalRevenue = totalRevenue
+        };
+    }
+
+    public AdminRevenueResponse GetAdminRevenue()
+    {
+        using var connection = OpenConnection();
+
+        decimal totalPlatformFeeRevenue = 0;
+        decimal platformFeeRevenuePastMonth = 0;
+        decimal platformFeeRevenueThisMonth = 0;
+        int totalBookings = 0;
+
+        using (var revenueCommand = new NpgsqlCommand(@"
+            SELECT
+                COALESCE(SUM(t.platform_fee * COALESCE(array_length(b.seat_numbers, 1), 0)), 0) AS total_platform_fee_revenue,
+                COUNT(b.id) AS total_bookings
+            FROM bookings b
+            JOIN trips t ON t.id = b.trip_id
+            WHERE b.is_cancelled = FALSE;", connection))
+        {
+            using var reader = revenueCommand.ExecuteReader();
+            if (reader.Read())
+            {
+                totalPlatformFeeRevenue = reader.IsDBNull(0) ? 0 : reader.GetDecimal(0);
+                totalBookings = reader.IsDBNull(1) ? 0 : reader.GetInt32(1);
+            }
+        }
+
+        var now = DateTime.UtcNow;
+        var monthStart = new DateTime(now.Year, now.Month, 1);
+        var pastMonthStart = monthStart.AddMonths(-1);
+
+        using (var monthCommand = new NpgsqlCommand(@"
+            SELECT
+                COALESCE(SUM(CASE WHEN b.created_at >= @month_start THEN t.platform_fee * COALESCE(array_length(b.seat_numbers, 1), 0) ELSE 0 END), 0) AS this_month,
+                COALESCE(SUM(CASE WHEN b.created_at >= @past_month_start AND b.created_at < @month_start THEN t.platform_fee * COALESCE(array_length(b.seat_numbers, 1), 0) ELSE 0 END), 0) AS past_month
+            FROM bookings b
+            JOIN trips t ON t.id = b.trip_id
+            WHERE b.is_cancelled = FALSE;", connection))
+        {
+            monthCommand.Parameters.AddWithValue("month_start", monthStart);
+            monthCommand.Parameters.AddWithValue("past_month_start", pastMonthStart);
+            using var reader = monthCommand.ExecuteReader();
+            if (reader.Read())
+            {
+                platformFeeRevenueThisMonth = reader.IsDBNull(0) ? 0 : reader.GetDecimal(0);
+                platformFeeRevenuePastMonth = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1);
+            }
+        }
+
+        return new AdminRevenueResponse
+        {
+            TotalPlatformFeeRevenue = totalPlatformFeeRevenue,
+            PlatformFeeRevenueThisMonth = platformFeeRevenueThisMonth,
+            PlatformFeeRevenuePastMonth = platformFeeRevenuePastMonth,
+            TotalBookings = totalBookings
         };
     }
 
@@ -925,25 +1008,36 @@ public sealed class TransportService : ITransportService
               AND o.is_disabled = FALSE
               AND LOWER(r.source) = LOWER(@source)
               AND LOWER(r.destination) = LOWER(@destination)
-              AND DATE(t.departure_time) = @travel_date
+              AND (
+                  (t.trip_type = 'OneTime' AND DATE(t.departure_time) = @travel_date)
+                  OR
+                  (t.trip_type = 'Daily' AND DATE(t.departure_time) <= @travel_date AND t.days_of_week LIKE '%' || @day_of_week || '%')
+              )
             ORDER BY t.departure_time;", connection);
 
         command.Parameters.AddWithValue("source", source.Trim());
         command.Parameters.AddWithValue("destination", destination.Trim());
         command.Parameters.AddWithValue("travel_date", date.ToDateTime(TimeOnly.MinValue));
+        command.Parameters.AddWithValue("day_of_week", date.ToString("ddd"));
 
         using var reader = command.ExecuteReader();
         var rawTrips = new List<(Guid TripId, Guid BusId, string BusName, string Source, string Destination, DateTime Departure, DateTime Arrival, int Capacity, decimal BasePrice, decimal PlatformFee, bool IsVariable)>();
         while (reader.Read())
         {
+            var originalDeparture = reader.GetDateTime(5);
+            var originalArrival = reader.GetDateTime(6);
+            var daysOffset = (date.ToDateTime(TimeOnly.MinValue).Date - originalDeparture.Date).Days;
+            var actualDeparture = originalDeparture.AddDays(daysOffset);
+            var actualArrival = originalArrival.AddDays(daysOffset);
+
             rawTrips.Add((
                 reader.GetGuid(0),
                 reader.GetGuid(1),
                 reader.GetString(2),
                 reader.GetString(3),
                 reader.GetString(4),
-                reader.GetDateTime(5),
-                reader.GetDateTime(6),
+                actualDeparture,
+                actualArrival,
                 reader.GetInt32(7),
                 reader.GetDecimal(8),
                 reader.GetDecimal(9),
@@ -956,7 +1050,7 @@ public sealed class TransportService : ITransportService
         var trips = new List<TripSummary>();
         foreach (var item in rawTrips)
         {
-            var seatsAvailable = item.Capacity - GetReservedSeatNumbers(connection, item.TripId).Count;
+            var seatsAvailable = item.Capacity - GetReservedSeatNumbers(connection, item.TripId, date).Count;
 
             trips.Add(new TripSummary
             {
@@ -978,16 +1072,17 @@ public sealed class TransportService : ITransportService
         return trips;
     }
 
-    private HashSet<int> GetReservedSeatNumbers(NpgsqlConnection connection, Guid tripId)
+    private HashSet<int> GetReservedSeatNumbers(NpgsqlConnection connection, Guid tripId, DateOnly travelDate)
     {
         var reserved = new HashSet<int>();
 
         using (var bookedCommand = new NpgsqlCommand(@"
             SELECT seat_numbers
             FROM bookings
-            WHERE trip_id = @trip_id AND is_cancelled = FALSE;", connection))
+            WHERE trip_id = @trip_id AND travel_date = @travel_date AND is_cancelled = FALSE;", connection))
         {
             bookedCommand.Parameters.AddWithValue("trip_id", tripId);
+            bookedCommand.Parameters.AddWithValue("travel_date", travelDate.ToDateTime(TimeOnly.MinValue));
             using var reader = bookedCommand.ExecuteReader();
             while (reader.Read())
             {
@@ -1001,10 +1096,11 @@ public sealed class TransportService : ITransportService
         using (var lockCommand = new NpgsqlCommand(@"
             SELECT seat_numbers
             FROM seat_locks
-            WHERE trip_id = @trip_id
+            WHERE trip_id = @trip_id AND travel_date = @travel_date
               AND expires_at > @now;", connection))
         {
             lockCommand.Parameters.AddWithValue("trip_id", tripId);
+            lockCommand.Parameters.AddWithValue("travel_date", travelDate.ToDateTime(TimeOnly.MinValue));
             lockCommand.Parameters.AddWithValue("now", DateTime.UtcNow);
             using var reader = lockCommand.ExecuteReader();
             while (reader.Read())
@@ -1148,7 +1244,8 @@ public sealed class TransportService : ITransportService
                 location TEXT NOT NULL,
                 address TEXT NULL,
                 is_default BOOLEAN NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL
+                created_at TIMESTAMPTZ NOT NULL,
+                UNIQUE (operator_id, route_id, is_pickup, location)
             );
 
             CREATE TABLE IF NOT EXISTS platform_fees (
@@ -1157,7 +1254,16 @@ public sealed class TransportService : ITransportService
                 description TEXT NULL,
                 is_active BOOLEAN NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL
-            );", connection);
+            );
+
+            -- Ensure unique constraint for pickup_drop_points exists for upsert logic
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_operator_route_pickup_v2') THEN
+                    ALTER TABLE pickup_drop_points DROP CONSTRAINT IF EXISTS uq_operator_route_pickup;
+                    ALTER TABLE pickup_drop_points ADD CONSTRAINT uq_operator_route_pickup_v2 UNIQUE (operator_id, route_id, is_pickup, location);
+                END IF;
+            END $$;", connection);
 
         command.ExecuteNonQuery();
 
@@ -1170,8 +1276,43 @@ public sealed class TransportService : ITransportService
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='trips' AND column_name='days_of_week') THEN
                     ALTER TABLE trips ADD COLUMN days_of_week TEXT NULL;
                 END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='trips' AND column_name='arrival_day_offset') THEN
+                    ALTER TABLE trips ADD COLUMN arrival_day_offset INT NOT NULL DEFAULT 0;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='trips' AND column_name='start_date') THEN
+                    ALTER TABLE trips ADD COLUMN start_date DATE NULL;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='trips' AND column_name='end_date') THEN
+                    ALTER TABLE trips ADD COLUMN end_date DATE NULL;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='trips' AND column_name='departure_time_only') THEN
+                    ALTER TABLE trips ADD COLUMN departure_time_only TIME NULL;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='trips' AND column_name='arrival_time_only') THEN
+                    ALTER TABLE trips ADD COLUMN arrival_time_only TIME NULL;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='bookings' AND column_name='travel_date') THEN
+                    ALTER TABLE bookings ADD COLUMN travel_date DATE NOT NULL DEFAULT CURRENT_DATE;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='seat_locks' AND column_name='travel_date') THEN
+                    ALTER TABLE seat_locks ADD COLUMN travel_date DATE NOT NULL DEFAULT CURRENT_DATE;
+                END IF;
             END $$;", connection);
         alterCommand.ExecuteNonQuery();
+
+        // Ensure active trips always use the currently active platform fee.
+        using var syncFeeCommand = new NpgsqlCommand(@"
+            UPDATE trips t
+            SET platform_fee = pf.amount
+            FROM (
+                SELECT amount
+                FROM platform_fees
+                WHERE is_active = TRUE
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) pf
+            WHERE t.is_active = TRUE;", connection);
+        syncFeeCommand.ExecuteNonQuery();
     }
 
     private void SeedDemoData()
@@ -1216,13 +1357,14 @@ public sealed class TransportService : ITransportService
 
         using (var insertBus = new NpgsqlCommand(@"
             INSERT INTO buses
-            (id, operator_id, bus_name, capacity, layout_name, layout_json, is_temporarily_unavailable, is_approved, is_active, created_at)
+            (id, operator_id, bus_name, bus_number, capacity, layout_name, layout_json, is_temporarily_unavailable, is_approved, is_active, created_at)
             VALUES
-            (@id, @operator_id, @bus_name, @capacity, @layout_name, @layout_json, FALSE, TRUE, TRUE, @created_at);", connection, transaction))
+            (@id, @operator_id, @bus_name, @bus_number, @capacity, @layout_name, @layout_json, FALSE, TRUE, TRUE, @created_at);", connection, transaction))
         {
             insertBus.Parameters.AddWithValue("id", busId);
             insertBus.Parameters.AddWithValue("operator_id", operatorId);
             insertBus.Parameters.AddWithValue("bus_name", "Demo AC Sleeper");
+            insertBus.Parameters.AddWithValue("bus_number", "DEMO-1234");
             insertBus.Parameters.AddWithValue("capacity", 40);
             insertBus.Parameters.AddWithValue("layout_name", "2+2");
             insertBus.Parameters.AddWithValue("layout_json", "{\"rows\":10,\"columns\":4}");
@@ -1440,32 +1582,39 @@ public sealed class TransportService : ITransportService
         return response;
     }
 
-    public SeatLayoutResponse GetSeatLayout(Guid tripId)
+    public SeatLayoutResponse GetSeatLayout(Guid tripId, DateOnly travelDate)
     {
         DeleteExpiredLocks();
 
         using var connection = OpenConnection();
         using var command = new NpgsqlCommand(@"
-            SELECT t.id, b.bus_name, b.capacity, b.layout_name, r.source, r.destination
+            SELECT t.id, t.operator_id, t.route_id, b.bus_name, b.capacity, b.layout_name, r.source, r.destination
             FROM trips t
             JOIN buses b ON b.id = t.bus_id
             JOIN routes r ON r.id = t.route_id
             WHERE t.id = @trip_id AND t.is_active = TRUE;", connection);
         command.Parameters.AddWithValue("trip_id", tripId);
 
-        using var reader = command.ExecuteReader();
-        if (!reader.Read())
+        Guid operatorId;
+        Guid routeId;
+        string busName;
+        int capacity;
+        string layoutName;
+
+        using (var reader = command.ExecuteReader())
         {
-            throw new KeyNotFoundException("Trip not found.");
+            if (!reader.Read())
+            {
+                throw new KeyNotFoundException("Trip not found.");
+            }
+            operatorId = reader.GetGuid(reader.GetOrdinal("operator_id"));
+            routeId = reader.GetGuid(reader.GetOrdinal("route_id"));
+            busName = reader.GetString(reader.GetOrdinal("bus_name"));
+            capacity = reader.GetInt32(reader.GetOrdinal("capacity"));
+            layoutName = reader.GetString(reader.GetOrdinal("layout_name"));
         }
 
-        var tripId_var = reader.GetGuid(reader.GetOrdinal("id"));
-        var busName = reader.GetString(reader.GetOrdinal("bus_name"));
-        var capacity = reader.GetInt32(reader.GetOrdinal("capacity"));
-        var layoutName = reader.GetString(reader.GetOrdinal("layout_name"));
-        reader.Close();
-
-        var (bookedSeats, lockedSeats) = GetReservedSeatsWithGender(connection, tripId);
+        var (bookedSeats, lockedSeats) = GetReservedSeatsWithGender(connection, tripId, travelDate);
         var availableSeats = Enumerable.Range(1, capacity)
             .Where(s => !bookedSeats.ContainsKey(s) && !lockedSeats.Contains(s))
             .ToList();
@@ -1511,12 +1660,15 @@ public sealed class TransportService : ITransportService
         return new SeatLayoutResponse
         {
             TripId = tripId,
+            TravelDate = travelDate,
             BusName = busName,
             LayoutName = layoutName,
             Capacity = capacity,
             SeatsAvailableLeft = availableSeats.Count,
             Seats = seatsDict,
-            LadiesSeatsAvailable = ladiesSeats
+            LadiesSeatsAvailable = ladiesSeats,
+            PickupPoints = GetPickupDropPoints(operatorId, routeId, true).ToList(),
+            DropPoints = GetPickupDropPoints(operatorId, routeId, false).ToList()
         };
     }
 
@@ -1656,7 +1808,7 @@ public sealed class TransportService : ITransportService
                     RefundAmount = reader.GetDecimal(reader.GetOrdinal("refund_amount")),
                     IsCancelled = isCancelled,
                     PaymentStatus = reader.GetString(reader.GetOrdinal("payment_status")),
-                    TicketUrl = reader.GetString(reader.GetOrdinal("ticket_download_url")),
+                    TicketUrl = $"/api/bookings/{bookingId}/ticket/download",
                     BookedAt = reader.GetDateTime(reader.GetOrdinal("created_at")),
                     Status = status
                 };
@@ -1699,7 +1851,7 @@ public sealed class TransportService : ITransportService
             ArrivalTime = reader.GetDateTime(reader.GetOrdinal("arrival_time")),
             TotalAmount = reader.GetDecimal(reader.GetOrdinal("total_amount")),
             PaymentStatus = reader.GetString(reader.GetOrdinal("payment_status")),
-            TicketUrl = reader.GetString(reader.GetOrdinal("ticket_download_url"))
+            TicketUrl = $"/api/bookings/{bookingId}/ticket/download"
         };
         reader.Close();
 
@@ -1723,6 +1875,123 @@ public sealed class TransportService : ITransportService
         }
 
         return ticket;
+    }
+
+    public (byte[] Content, string FileName) GenerateTicketFile(Guid bookingId, string userEmail)
+    {
+        QuestPDF.Settings.License = LicenseType.Community;
+        var ticket = GetTicket(bookingId, userEmail);
+
+        var document = Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(1, Unit.Inch);
+                page.PageColor(Colors.White);
+                page.DefaultTextStyle(x => x.FontSize(11).FontFamily(Fonts.Verdana));
+
+                page.Header().Row(row =>
+                {
+                    row.RelativeItem().Column(col =>
+                    {
+                        col.Item().Text("BUS TICKET").FontSize(24).SemiBold().FontColor(Colors.Blue.Medium);
+                        col.Item().Text($"{ticket.BusName}").FontSize(14).Italic();
+                    });
+
+                    row.RelativeItem().AlignRight().Column(col =>
+                    {
+                        col.Item().Text($"PNR: {ticket.Pnr}").FontSize(16).SemiBold();
+                        col.Item().Text($"Date: {DateTime.Now:d}");
+                    });
+                });
+
+                page.Content().PaddingVertical(20).Column(col =>
+                {
+                    col.Spacing(20);
+
+                    // Trip Info
+                    col.Item().Background(Colors.Grey.Lighten3).Padding(10).Row(row =>
+                    {
+                        row.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text("FROM").FontSize(10).SemiBold().FontColor(Colors.Grey.Darken2);
+                            c.Item().Text(ticket.Source).FontSize(14).SemiBold();
+                            c.Item().Text(ticket.DepartureTime.ToString("f")).FontSize(10);
+                        });
+
+                        row.ConstantItem(50).AlignCenter().Text("→").FontSize(20);
+
+                        row.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text("TO").FontSize(10).SemiBold().FontColor(Colors.Grey.Darken2);
+                            c.Item().Text(ticket.Destination).FontSize(14).SemiBold();
+                            c.Item().Text(ticket.ArrivalTime.ToString("f")).FontSize(10);
+                        });
+                    });
+
+                    // Passenger Info
+                    col.Item().Column(c =>
+                    {
+                        c.Item().PaddingBottom(5).Text("PASSENGERS").FontSize(12).SemiBold();
+                        c.Item().Table(table =>
+                        {
+                            table.ColumnsDefinition(columns =>
+                            {
+                                columns.RelativeColumn(3);
+                                columns.RelativeColumn(1);
+                                columns.RelativeColumn(1);
+                                columns.RelativeColumn(1);
+                            });
+
+                            table.Header(header =>
+                            {
+                                header.Cell().Element(CellStyle).Text("Name");
+                                header.Cell().Element(CellStyle).Text("Age");
+                                header.Cell().Element(CellStyle).Text("Gender");
+                                header.Cell().Element(CellStyle).Text("Seat");
+
+                                static IContainer CellStyle(IContainer container)
+                                {
+                                    return container.DefaultTextStyle(x => x.SemiBold()).PaddingVertical(5).BorderBottom(1).BorderColor(Colors.Black);
+                                }
+                            });
+
+                            foreach (var p in ticket.Passengers)
+                            {
+                                table.Cell().Element(CellStyle).Text(p.Name);
+                                table.Cell().Element(CellStyle).Text(p.Age.ToString());
+                                table.Cell().Element(CellStyle).Text(p.Gender);
+                                table.Cell().Element(CellStyle).Text(p.SeatNumber.ToString());
+
+                                static IContainer CellStyle(IContainer container)
+                                {
+                                    return container.PaddingVertical(5).BorderBottom(1).BorderColor(Colors.Grey.Lighten2);
+                                }
+                            }
+                        });
+                    });
+
+                    // Summary
+                    col.Item().AlignRight().Column(c =>
+                    {
+                        c.Spacing(5);
+                        c.Item().Text($"Total Amount: {ticket.TotalAmount:C}").FontSize(14).SemiBold();
+                        c.Item().Text($"Payment Status: {ticket.PaymentStatus}").FontSize(10).Italic();
+                    });
+                });
+
+                page.Footer().AlignCenter().Text(x =>
+                {
+                    x.Span("Page ");
+                    x.CurrentPageNumber();
+                    x.Span(" of ");
+                    x.TotalPages();
+                });
+            });
+        });
+
+        return (document.GeneratePdf(), $"Ticket_{ticket.Pnr}.pdf");
     }
 
     public PaymentInitiateResponse InitiatePayment(PaymentInitiateRequest request)
@@ -1782,7 +2051,10 @@ public sealed class TransportService : ITransportService
         using var command = new NpgsqlCommand(@"
             SELECT t.id, t.bus_id, b.bus_name, r.source, r.destination,
                    t.departure_time, t.arrival_time, b.capacity, t.base_price,
-                   t.platform_fee, t.is_variable_price
+                   t.platform_fee, t.is_variable_price, t.trip_type, t.days_of_week,
+                   t.start_date, t.end_date, t.arrival_day_offset, 
+                   t.departure_time_only, t.arrival_time_only,
+                   t.operator_id, t.route_id
             FROM trips t
             JOIN buses b ON b.id = t.bus_id
             JOIN routes r ON r.id = t.route_id
@@ -1790,37 +2062,76 @@ public sealed class TransportService : ITransportService
             WHERE t.is_active = TRUE
               AND b.is_approved = TRUE AND b.is_active = TRUE
               AND o.approval_status = 'Approved' AND o.is_disabled = FALSE
-              AND DATE(t.departure_time) = @date
+              AND (
+                  (t.trip_type = 'OneTime' AND DATE(t.departure_time) = @date)
+                  OR
+                  (t.trip_type = 'Daily' AND 
+                   t.start_date <= @date AND 
+                   (t.end_date IS NULL OR t.end_date >= @date) AND
+                   (t.days_of_week IS NULL OR t.days_of_week ILIKE @day_pattern))
+              )
               AND (LOWER(r.source) LIKE LOWER(@source_pattern) OR LOWER(r.source) = LOWER(@source))
               AND (LOWER(r.destination) LIKE LOWER(@dest_pattern) OR LOWER(r.destination) = LOWER(@destination))
             ORDER BY t.departure_time ASC;", connection);
 
         var sourcePattern = $"%{source.ToLower()}%";
         var destPattern = $"%{destination.ToLower()}%";
+        var dayOfWeek = date.DayOfWeek.ToString().Substring(0, 3); // "Mon", "Tue"...
+        var dayPattern = $"%{dayOfWeek}%";
         
         command.Parameters.AddWithValue("date", date);
+        command.Parameters.AddWithValue("day_pattern", dayPattern);
         command.Parameters.AddWithValue("source", source.ToLower());
         command.Parameters.AddWithValue("source_pattern", sourcePattern);
         command.Parameters.AddWithValue("destination", destination.ToLower());
         command.Parameters.AddWithValue("dest_pattern", destPattern);
 
-        var rows = new List<(Guid TripId, Guid BusId, string BusName, string Source, string Destination, DateTime DepartureTime, DateTime ArrivalTime, int Capacity, decimal BasePrice, decimal PlatformFee, bool IsVariablePrice)>();
+        var rows = new List<(Guid TripId, Guid BusId, Guid OperatorId, Guid RouteId, string BusName, string Source, string Destination, DateTime DepartureTime, DateTime ArrivalTime, int Capacity, decimal BasePrice, decimal PlatformFee, bool IsVariablePrice, string TripType, string? DaysOfWeek, DateOnly? StartDate, DateOnly? EndDate, int ArrivalDayOffset)>();
         using (var reader = command.ExecuteReader())
         {
             while (reader.Read())
             {
+                var tripTypeStr = reader.GetString(reader.GetOrdinal("trip_type"));
+                DateTime depTime;
+                DateTime arrTime;
+                int offset = reader.GetInt32(reader.GetOrdinal("arrival_day_offset"));
+                DateOnly? sDate = reader.IsDBNull(reader.GetOrdinal("start_date")) ? null : reader.GetFieldValue<DateOnly>(reader.GetOrdinal("start_date"));
+                DateOnly? eDate = reader.IsDBNull(reader.GetOrdinal("end_date")) ? null : reader.GetFieldValue<DateOnly>(reader.GetOrdinal("end_date"));
+
+                if (tripTypeStr == "Daily")
+                {
+                    // Construct times from travel date + stored TimeOnly
+                    var dTimeOnly = reader.GetFieldValue<TimeOnly>(reader.GetOrdinal("departure_time_only"));
+                    var aTimeOnly = reader.GetFieldValue<TimeOnly>(reader.GetOrdinal("arrival_time_only"));
+                    
+                    depTime = date.ToDateTime(dTimeOnly);
+                    arrTime = date.AddDays(offset).ToDateTime(aTimeOnly);
+                }
+                else
+                {
+                    depTime = reader.GetDateTime(reader.GetOrdinal("departure_time"));
+                    arrTime = reader.GetDateTime(reader.GetOrdinal("arrival_time"));
+                }
+
                 rows.Add((
                     reader.GetGuid(reader.GetOrdinal("id")),
                     reader.GetGuid(reader.GetOrdinal("bus_id")),
+                    reader.GetGuid(reader.GetOrdinal("operator_id")),
+                    reader.GetGuid(reader.GetOrdinal("route_id")),
                     reader.GetString(reader.GetOrdinal("bus_name")),
                     reader.GetString(reader.GetOrdinal("source")),
                     reader.GetString(reader.GetOrdinal("destination")),
-                    reader.GetDateTime(reader.GetOrdinal("departure_time")),
-                    reader.GetDateTime(reader.GetOrdinal("arrival_time")),
+                    depTime,
+                    arrTime,
                     reader.GetInt32(reader.GetOrdinal("capacity")),
                     reader.GetDecimal(reader.GetOrdinal("base_price")),
                     reader.GetDecimal(reader.GetOrdinal("platform_fee")),
-                    reader.GetBoolean(reader.GetOrdinal("is_variable_price"))
+                    reader.GetBoolean(reader.GetOrdinal("is_variable_price")),
+                    tripTypeStr,
+                    reader.IsDBNull(reader.GetOrdinal("days_of_week")) ? null : reader.GetString(reader.GetOrdinal("days_of_week")),
+                    sDate,
+                    eDate,
+                    offset
                 ));
             }
         }
@@ -1828,10 +2139,8 @@ public sealed class TransportService : ITransportService
         var trips = new List<TripSummary>(rows.Count);
         foreach (var row in rows)
         {
-            var reserved = GetReservedSeatCount(connection, row.TripId);
-            var available = row.Capacity - reserved;
-
-            trips.Add(new TripSummary
+            var reserved = GetReservedSeatCount(connection, row.TripId, date);
+            var trip = new TripSummary
             {
                 TripId = row.TripId,
                 BusId = row.BusId,
@@ -1841,17 +2150,26 @@ public sealed class TransportService : ITransportService
                 DepartureTime = row.DepartureTime,
                 ArrivalTime = row.ArrivalTime,
                 Capacity = row.Capacity,
-                SeatsAvailable = available,
+                SeatsAvailable = row.Capacity - reserved,
                 BasePrice = row.BasePrice,
                 PlatformFee = row.PlatformFee,
-                IsVariablePrice = row.IsVariablePrice
-            });
+                IsVariablePrice = row.IsVariablePrice,
+                TripType = Enum.Parse<TripType>(row.TripType),
+                DaysOfWeek = row.DaysOfWeek,
+                StartDate = row.StartDate,
+                EndDate = row.EndDate,
+                ArrivalDayOffset = row.ArrivalDayOffset,
+                IsActive = true,
+                PickupPoints = GetPickupDropPointsInternal(connection, row.OperatorId, row.RouteId, true).ToList(),
+                DropPoints = GetPickupDropPointsInternal(connection, row.OperatorId, row.RouteId, false).ToList()
+            };
+            trips.Add(trip);
         }
 
         return trips;
     }
 
-    private (Dictionary<int, (string Gender, string Name)>, HashSet<int>) GetReservedSeatsWithGender(NpgsqlConnection connection, Guid tripId)
+    private (Dictionary<int, (string Gender, string Name)>, HashSet<int>) GetReservedSeatsWithGender(NpgsqlConnection connection, Guid tripId, DateOnly travelDate)
     {
         var booked = new Dictionary<int, (string, string)>();
         var locked = new HashSet<int>();
@@ -1860,9 +2178,10 @@ public sealed class TransportService : ITransportService
             SELECT bp.seat_number, bp.gender, bp.name
             FROM booking_passengers bp
             JOIN bookings b ON b.id = bp.booking_id
-            WHERE b.trip_id = @trip_id AND b.is_cancelled = FALSE;", connection))
+            WHERE b.trip_id = @trip_id AND b.travel_date = @travel_date AND b.is_cancelled = FALSE;", connection))
         {
             command.Parameters.AddWithValue("trip_id", tripId);
+            command.Parameters.AddWithValue("travel_date", travelDate);
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
@@ -1876,9 +2195,10 @@ public sealed class TransportService : ITransportService
         using (var lockCommand = new NpgsqlCommand(@"
             SELECT UNNEST(seat_numbers) as seat_num
             FROM seat_locks
-            WHERE trip_id = @trip_id AND expires_at > NOW();", connection))
+            WHERE trip_id = @trip_id AND travel_date = @travel_date AND expires_at > NOW();", connection))
         {
             lockCommand.Parameters.AddWithValue("trip_id", tripId);
+            lockCommand.Parameters.AddWithValue("travel_date", travelDate);
             using var lockReader = lockCommand.ExecuteReader();
             while (lockReader.Read())
             {
@@ -1889,16 +2209,17 @@ public sealed class TransportService : ITransportService
         return (booked, locked);
     }
 
-    private int GetReservedSeatCount(NpgsqlConnection connection, Guid tripId)
+    private int GetReservedSeatCount(NpgsqlConnection connection, Guid tripId, DateOnly travelDate)
     {
         int count = 0;
 
         using (var command = new NpgsqlCommand(@"
             SELECT COUNT(*) FROM booking_passengers bp
             JOIN bookings b ON b.id = bp.booking_id
-            WHERE b.trip_id = @trip_id AND b.is_cancelled = FALSE;", connection))
+            WHERE b.trip_id = @trip_id AND b.travel_date = @travel_date AND b.is_cancelled = FALSE;", connection))
         {
             command.Parameters.AddWithValue("trip_id", tripId);
+            command.Parameters.AddWithValue("travel_date", travelDate);
             count += Convert.ToInt32(command.ExecuteScalar());
         }
 
@@ -1907,10 +2228,11 @@ public sealed class TransportService : ITransportService
             FROM (
                 SELECT UNNEST(seat_numbers) AS seat_num
                 FROM seat_locks
-                WHERE trip_id = @trip_id AND expires_at > NOW()
+                WHERE trip_id = @trip_id AND travel_date = @travel_date AND expires_at > NOW()
             ) locked_seats;", connection))
         {
             lockCommand.Parameters.AddWithValue("trip_id", tripId);
+            lockCommand.Parameters.AddWithValue("travel_date", travelDate);
             var lockCount = lockCommand.ExecuteScalar();
             if (lockCount != null && lockCount != DBNull.Value)
             {
@@ -2115,7 +2437,10 @@ public sealed class TransportService : ITransportService
         
         using (var revenueCommand = new NpgsqlCommand(@"
             SELECT 
-                SUM(b.total_amount) as total_revenue,
+                SUM(
+                    (CASE WHEN t.is_variable_price = TRUE THEN t.base_price * 1.10 ELSE t.base_price END)
+                    * COALESCE(array_length(b.seat_numbers, 1), 0)
+                ) as total_revenue,
                 COUNT(b.id) as total_bookings
             FROM bookings b
             JOIN trips t ON t.id = b.trip_id
@@ -2136,8 +2461,14 @@ public sealed class TransportService : ITransportService
 
         using (var monthCommand = new NpgsqlCommand(@"
             SELECT 
-                SUM(CASE WHEN b.created_at >= @month_start THEN b.total_amount ELSE 0 END) as this_month,
-                SUM(CASE WHEN b.created_at >= @past_month_start AND b.created_at < @month_start THEN b.total_amount ELSE 0 END) as past_month
+                SUM(CASE WHEN b.created_at >= @month_start THEN
+                    (CASE WHEN t.is_variable_price = TRUE THEN t.base_price * 1.10 ELSE t.base_price END)
+                    * COALESCE(array_length(b.seat_numbers, 1), 0)
+                    ELSE 0 END) as this_month,
+                SUM(CASE WHEN b.created_at >= @past_month_start AND b.created_at < @month_start THEN
+                    (CASE WHEN t.is_variable_price = TRUE THEN t.base_price * 1.10 ELSE t.base_price END)
+                    * COALESCE(array_length(b.seat_numbers, 1), 0)
+                    ELSE 0 END) as past_month
             FROM bookings b
             JOIN trips t ON t.id = b.trip_id
             WHERE t.operator_id = @operator_id AND b.is_cancelled = FALSE;", connection))
@@ -2174,7 +2505,10 @@ public sealed class TransportService : ITransportService
         using (var busRevenueCommand = new NpgsqlCommand(@"
             SELECT 
                 b.id, b.bus_name, b.bus_number,
-                SUM(bk.total_amount) as revenue,
+                SUM(
+                    (CASE WHEN t.is_variable_price = TRUE THEN t.base_price * 1.10 ELSE t.base_price END)
+                    * COALESCE(array_length(bk.seat_numbers, 1), 0)
+                ) as revenue,
                 COUNT(bk.id) as bookings
             FROM buses b
             LEFT JOIN trips t ON t.bus_id = b.id
@@ -2243,7 +2577,7 @@ public sealed class TransportService : ITransportService
         };
     }
 
-    public IEnumerable<PreferredRouteResponse> GetOperatorPreferredRoutes(Guid operatorId)
+    public List<PreferredRouteResponse> GetOperatorPreferredRoutes(Guid operatorId)
     {
         using var connection = OpenConnection();
         using var command = new NpgsqlCommand(@"
@@ -2253,18 +2587,107 @@ public sealed class TransportService : ITransportService
             WHERE opr.operator_id = @operator_id;", connection);
         command.Parameters.AddWithValue("operator_id", operatorId);
 
-        using var reader = command.ExecuteReader();
         var routes = new List<PreferredRouteResponse>();
-        while (reader.Read())
+        using (var reader = command.ExecuteReader())
         {
-            routes.Add(new PreferredRouteResponse
+            while (reader.Read())
             {
-                RouteId = reader.GetGuid(0),
-                Source = reader.GetString(1),
-                Destination = reader.GetString(2)
-            });
+                routes.Add(new PreferredRouteResponse
+                {
+                    RouteId = reader.GetGuid(0),
+                    Source = reader.GetString(1),
+                    Destination = reader.GetString(2),
+                    PickupPoints = new List<PickupDropPointResponse>(),
+                    DropPoints = new List<PickupDropPointResponse>()
+                });
+            }
         }
+
+        if (routes.Count == 0) return routes;
+
+        // Fetch all points for these routes in one go
+        using var pointsCommand = new NpgsqlCommand(@"
+            SELECT route_id, is_pickup, id, location, address, is_default
+            FROM pickup_drop_points
+            WHERE operator_id = @operator_id;", connection);
+        pointsCommand.Parameters.AddWithValue("operator_id", operatorId);
+
+        using (var reader = pointsCommand.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var routeId = reader.GetGuid(0);
+                var isPickup = reader.GetBoolean(1);
+                var route = routes.Find(r => r.RouteId == routeId);
+                if (route != null)
+                {
+                    var point = new PickupDropPointResponse
+                    {
+                        PointId = reader.GetGuid(2),
+                        Location = reader.GetString(3),
+                        Address = reader.IsDBNull(4) ? null : reader.GetString(4),
+                        IsDefault = reader.GetBoolean(5),
+                        IsPickup = isPickup
+                    };
+                    if (isPickup) route.PickupPoints.Add(point);
+                    else route.DropPoints.Add(point);
+                }
+            }
+        }
+
         return routes;
+    }
+
+    public IEnumerable<TripSummary> GetOperatorTrips(Guid operatorId)
+    {
+        using var connection = OpenConnection();
+        using var command = new NpgsqlCommand(@"
+            SELECT t.id, t.bus_id, b.bus_name, r.source, r.destination, t.departure_time, t.arrival_time,
+                   b.capacity, t.base_price, t.platform_fee, t.is_variable_price, t.trip_type, t.days_of_week, t.is_active,
+                   t.route_id
+            FROM trips t
+            JOIN routes r ON r.id = t.route_id
+            JOIN buses b ON b.id = t.bus_id
+            WHERE t.operator_id = @operator_id
+            ORDER BY t.departure_time DESC;", connection);
+        command.Parameters.AddWithValue("operator_id", operatorId);
+
+        var itemsWithRoute = new List<(TripSummary Trip, Guid RouteId)>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var routeId = reader.GetGuid(14);
+                itemsWithRoute.Add((new TripSummary
+                {
+                    TripId = reader.GetGuid(0),
+                    BusId = reader.GetGuid(1),
+                    BusName = reader.GetString(2),
+                    Source = reader.GetString(3),
+                    Destination = reader.GetString(4),
+                    DepartureTime = reader.GetDateTime(5),
+                    ArrivalTime = reader.GetDateTime(6),
+                    Capacity = reader.GetInt32(7),
+                    BasePrice = reader.GetDecimal(8),
+                    PlatformFee = reader.GetDecimal(9),
+                    IsVariablePrice = reader.GetBoolean(10),
+                    TripType = Enum.Parse<TripType>(reader.GetString(11)),
+                    DaysOfWeek = reader.IsDBNull(12) ? null : reader.GetString(12),
+                    IsActive = reader.GetBoolean(13),
+                    PickupPoints = new List<PickupDropPointResponse>(),
+                    DropPoints = new List<PickupDropPointResponse>()
+                }, routeId));
+            }
+        }
+
+        foreach (var (trip, routeId) in itemsWithRoute)
+        {
+            trip.PickupPoints = GetPickupDropPointsInternal(connection, operatorId, routeId, true).ToList();
+            trip.DropPoints = GetPickupDropPointsInternal(connection, operatorId, routeId, false).ToList();
+        }
+
+        var items = itemsWithRoute.Select(x => x.Trip).ToList();
+        return items;
     }
 
     public PickupDropPointResponse AddPickupDropPoint(Guid operatorId, Guid routeId, bool isPickup, PickupDropPointRequest request)
@@ -2274,7 +2697,10 @@ public sealed class TransportService : ITransportService
         
         using var insertCommand = new NpgsqlCommand(@"
             INSERT INTO pickup_drop_points (id, operator_id, route_id, is_pickup, location, address, is_default, created_at)
-            VALUES (@id, @operator_id, @route_id, @is_pickup, @location, @address, @is_default, @created_at);", connection);
+            VALUES (@id, @operator_id, @route_id, @is_pickup, @location, @address, @is_default, @created_at)
+            ON CONFLICT (operator_id, route_id, is_pickup, location) 
+            DO UPDATE SET address = EXCLUDED.address, created_at = EXCLUDED.created_at
+            RETURNING id;", connection);
         insertCommand.Parameters.AddWithValue("id", pointId);
         insertCommand.Parameters.AddWithValue("operator_id", operatorId);
         insertCommand.Parameters.AddWithValue("route_id", routeId);
@@ -2283,24 +2709,33 @@ public sealed class TransportService : ITransportService
         insertCommand.Parameters.AddWithValue("address", request.Address ?? (object)DBNull.Value);
         insertCommand.Parameters.AddWithValue("is_default", request.IsDefault);
         insertCommand.Parameters.AddWithValue("created_at", DateTime.UtcNow);
-        insertCommand.ExecuteNonQuery();
+        
+        var result = insertCommand.ExecuteScalar();
+        var actualId = result != null ? (Guid)result : pointId;
 
         return new PickupDropPointResponse
         {
-            PointId = pointId,
+            PointId = actualId,
             Location = request.Location.Trim(),
             Address = request.Address,
-            IsDefault = request.IsDefault
+            IsDefault = request.IsDefault,
+            IsPickup = isPickup
         };
     }
 
     public IEnumerable<PickupDropPointResponse> GetPickupDropPoints(Guid operatorId, Guid routeId, bool isPickup)
     {
         using var connection = OpenConnection();
+        return GetPickupDropPointsInternal(connection, operatorId, routeId, isPickup);
+    }
+
+    private IEnumerable<PickupDropPointResponse> GetPickupDropPointsInternal(NpgsqlConnection connection, Guid operatorId, Guid routeId, bool isPickup)
+    {
         using var command = new NpgsqlCommand(@"
             SELECT id, location, address, is_default
             FROM pickup_drop_points
-            WHERE operator_id = @operator_id AND route_id = @route_id AND is_pickup = @is_pickup;", connection);
+            WHERE operator_id = @operator_id AND route_id = @route_id AND is_pickup = @is_pickup
+            ORDER BY created_at ASC;", connection);
         command.Parameters.AddWithValue("operator_id", operatorId);
         command.Parameters.AddWithValue("route_id", routeId);
         command.Parameters.AddWithValue("is_pickup", isPickup);
@@ -2314,7 +2749,8 @@ public sealed class TransportService : ITransportService
                 PointId = reader.GetGuid(0),
                 Location = reader.GetString(1),
                 Address = reader.IsDBNull(2) ? null : reader.GetString(2),
-                IsDefault = reader.GetBoolean(3)
+                IsDefault = reader.GetBoolean(3),
+                IsPickup = isPickup
             });
         }
         return points;
@@ -2344,20 +2780,61 @@ public sealed class TransportService : ITransportService
         var platformFee = GetCurrentPlatformFeeAmount(connection);
         var tripTypeStr = request.TripType.ToString();
 
+        int arrivalDayOffset = 0;
+        DateTime departureDateTime;
+        DateTime arrivalDateTime;
+        DateOnly? startDate = null;
+        DateOnly? endDate = null;
+        TimeOnly? depTimeOnly = null;
+        TimeOnly? arrTimeOnly = null;
+
+        if (request.TripType == TripType.Daily)
+        {
+            if (!request.StartDate.HasValue || !request.DepartureTime.HasValue || !request.ArrivalTime.HasValue)
+            {
+                throw new InvalidOperationException("Daily trips require StartDate, DepartureTime, and ArrivalTime.");
+            }
+
+            startDate = request.StartDate.Value;
+            endDate = request.EndDate;
+            depTimeOnly = request.DepartureTime.Value;
+            arrTimeOnly = request.ArrivalTime.Value;
+
+            if (arrTimeOnly < depTimeOnly)
+            {
+                arrivalDayOffset = 1;
+            }
+
+            // For Daily trips, we store the start date's datetime in the legacy columns
+            departureDateTime = startDate.Value.ToDateTime(depTimeOnly.Value);
+            arrivalDateTime = startDate.Value.AddDays(arrivalDayOffset).ToDateTime(arrTimeOnly.Value);
+        }
+        else
+        {
+            if (!request.DepartureDateTime.HasValue || !request.ArrivalDateTime.HasValue)
+            {
+                throw new InvalidOperationException("OneTime trips require DepartureDateTime and ArrivalDateTime.");
+            }
+            departureDateTime = request.DepartureDateTime.Value;
+            arrivalDateTime = request.ArrivalDateTime.Value;
+        }
+
         using var insertCommand = new NpgsqlCommand(@"
             INSERT INTO trips
             (id, operator_id, bus_id, route_id, departure_time, arrival_time, base_price, platform_fee,
-             is_variable_price, pickup_points, drop_points, trip_type, days_of_week, is_active, created_at)
+             is_variable_price, pickup_points, drop_points, trip_type, days_of_week, is_active, created_at,
+             arrival_day_offset, start_date, end_date, departure_time_only, arrival_time_only)
             VALUES
             (@id, @operator_id, @bus_id, @route_id, @departure_time, @arrival_time, @base_price, @platform_fee,
-             FALSE, @pickup_points, @drop_points, @trip_type, @days_of_week, TRUE, @created_at);", connection);
+             FALSE, @pickup_points, @drop_points, @trip_type, @days_of_week, TRUE, @created_at,
+             @arrival_day_offset, @start_date, @end_date, @departure_time_only, @arrival_time_only);", connection);
 
         insertCommand.Parameters.AddWithValue("id", tripId);
         insertCommand.Parameters.AddWithValue("operator_id", operatorId);
         insertCommand.Parameters.AddWithValue("bus_id", request.BusId);
         insertCommand.Parameters.AddWithValue("route_id", request.RouteId);
-        insertCommand.Parameters.AddWithValue("departure_time", request.DepartureTime);
-        insertCommand.Parameters.AddWithValue("arrival_time", request.ArrivalTime);
+        insertCommand.Parameters.AddWithValue("departure_time", departureDateTime);
+        insertCommand.Parameters.AddWithValue("arrival_time", arrivalDateTime);
         insertCommand.Parameters.AddWithValue("base_price", request.BasePrice);
         insertCommand.Parameters.AddWithValue("platform_fee", platformFee);
         insertCommand.Parameters.AddWithValue("pickup_points", request.PickupPoints ?? (object)DBNull.Value);
@@ -2365,6 +2842,11 @@ public sealed class TransportService : ITransportService
         insertCommand.Parameters.AddWithValue("trip_type", tripTypeStr);
         insertCommand.Parameters.AddWithValue("days_of_week", request.DaysOfWeek ?? (object)DBNull.Value);
         insertCommand.Parameters.AddWithValue("created_at", DateTime.UtcNow);
+        insertCommand.Parameters.AddWithValue("arrival_day_offset", arrivalDayOffset);
+        insertCommand.Parameters.AddWithValue("start_date", (object?)startDate ?? DBNull.Value);
+        insertCommand.Parameters.AddWithValue("end_date", (object?)endDate ?? DBNull.Value);
+        insertCommand.Parameters.AddWithValue("departure_time_only", (object?)depTimeOnly ?? DBNull.Value);
+        insertCommand.Parameters.AddWithValue("arrival_time_only", (object?)arrTimeOnly ?? DBNull.Value);
         insertCommand.ExecuteNonQuery();
 
         return new TripSummary
@@ -2374,15 +2856,19 @@ public sealed class TransportService : ITransportService
             BusName = busRecord.BusName,
             Source = route.Source,
             Destination = route.Destination,
-            DepartureTime = request.DepartureTime,
-            ArrivalTime = request.ArrivalTime,
+            DepartureTime = departureDateTime,
+            ArrivalTime = arrivalDateTime,
             Capacity = busRecord.Capacity,
             SeatsAvailable = busRecord.Capacity,
             BasePrice = request.BasePrice,
             PlatformFee = platformFee,
             IsVariablePrice = false,
             TripType = request.TripType,
-            DaysOfWeek = request.DaysOfWeek
+            DaysOfWeek = request.DaysOfWeek,
+            StartDate = startDate,
+            EndDate = endDate,
+            ArrivalDayOffset = arrivalDayOffset,
+            IsActive = true
         };
     }
 
@@ -2420,6 +2906,15 @@ public sealed class TransportService : ITransportService
         insertCommand.Parameters.AddWithValue("description", request.Description ?? (object)DBNull.Value);
         insertCommand.Parameters.AddWithValue("created_at", DateTime.UtcNow);
         insertCommand.ExecuteNonQuery();
+
+        // Keep trip-level platform_fee in sync with the active global setting
+        // so existing trips immediately reflect updated fee in search and booking.
+        using (var updateTripsCommand = new NpgsqlCommand(
+            "UPDATE trips SET platform_fee = @platform_fee WHERE is_active = TRUE;", connection, transaction))
+        {
+            updateTripsCommand.Parameters.AddWithValue("platform_fee", request.FeeAmount);
+            updateTripsCommand.ExecuteNonQuery();
+        }
 
         transaction.Commit();
 
@@ -2520,6 +3015,23 @@ public sealed class TransportService : ITransportService
                 IsActive = IsActive,
                 LayoutName = LayoutName
             };
+        }
+    }
+    public void DeleteTrip(Guid operatorId, Guid tripId)
+    {
+        using var connection = OpenConnection();
+        using var command = new NpgsqlCommand(@"
+            UPDATE trips 
+            SET is_active = FALSE 
+            WHERE id = @trip_id AND operator_id = @operator_id;", connection);
+        
+        command.Parameters.AddWithValue("trip_id", tripId);
+        command.Parameters.AddWithValue("operator_id", operatorId);
+
+        int affected = command.ExecuteNonQuery();
+        if (affected == 0)
+        {
+            throw new KeyNotFoundException("Trip not found or does not belong to this operator.");
         }
     }
 }

@@ -22,6 +22,7 @@ export class OperatorDashboardComponent implements OnInit {
   allGlobalRoutes = signal<any[]>([]);
   revenue = signal<any | null>(null);
   dashboard = signal<any | null>(null);
+  trips = signal<any[]>([]);
   
   errorMessage = signal<string | null>(null);
   successMessage = signal<string | null>(null);
@@ -30,6 +31,17 @@ export class OperatorDashboardComponent implements OnInit {
   busSearch = signal<string>('');
   bookingSearch = signal<string>('');
   routeSearch = signal<string>('');
+  tripSearch = signal<string>('');
+
+  filteredTrips = computed(() => {
+    const term = this.tripSearch().toLowerCase();
+    if (!term) return this.trips();
+    return this.trips().filter(t => 
+      t.busName.toLowerCase().includes(term) || 
+      t.source.toLowerCase().includes(term) || 
+      t.destination.toLowerCase().includes(term)
+    );
+  });
 
   filteredBuses = computed(() => {
     const term = this.busSearch().toLowerCase();
@@ -67,6 +79,12 @@ export class OperatorDashboardComponent implements OnInit {
   tripForm = {
     busId: '',
     routeId: '',
+    // OneTime fields
+    departureDateTime: '',
+    arrivalDateTime: '',
+    // Daily fields
+    startDate: '',
+    endDate: '',
     departureTime: '',
     arrivalTime: '',
     basePrice: 0,
@@ -143,6 +161,7 @@ export class OperatorDashboardComponent implements OnInit {
 
     this.operatorService.getPreferredRoutes(this.operatorId).subscribe({
       next: (data) => {
+        console.log('Preferred Routes loaded:', data);
         this.preferredRoutes.set(data || []);
         if (data?.length && !this.tripForm.routeId) {
           this.tripForm.routeId = data[0].routeId;
@@ -161,6 +180,41 @@ export class OperatorDashboardComponent implements OnInit {
       next: (data) => this.allGlobalRoutes.set(data || []),
       error: (err) => console.error("Could not load global routes", err)
     });
+
+    this.operatorService.getTrips(this.operatorId).subscribe({
+      next: (data) => this.trips.set(data || []),
+      error: (err) => console.error("Could not load trips", err)
+    });
+  }
+
+  onRouteSelectedForPoints() {
+    if (!this.routeForm.routeId) {
+      this.routeForm.pickupPoint = '';
+      this.routeForm.pickupAddress = '';
+      this.routeForm.dropPoint = '';
+      this.routeForm.dropAddress = '';
+      return;
+    }
+
+    const route = this.preferredRoutes().find(r => r.routeId.toString().toLowerCase() === this.routeForm.routeId.toString().toLowerCase());
+    if (route) {
+      console.log('Route selected for points:', route);
+      if (route.pickupPoints && route.pickupPoints.length > 0) {
+        this.routeForm.pickupPoint = route.pickupPoints[0].location;
+        this.routeForm.pickupAddress = route.pickupPoints[0].address || '';
+      } else {
+        this.routeForm.pickupPoint = '';
+        this.routeForm.pickupAddress = '';
+      }
+
+      if (route.dropPoints && route.dropPoints.length > 0) {
+        this.routeForm.dropPoint = route.dropPoints[0].location;
+        this.routeForm.dropAddress = route.dropPoints[0].address || '';
+      } else {
+        this.routeForm.dropPoint = '';
+        this.routeForm.dropAddress = '';
+      }
+    }
   }
 
   // Bus Actions
@@ -234,11 +288,16 @@ export class OperatorDashboardComponent implements OnInit {
       next: () => {
         this.operatorService.addDropPoint(this.operatorId, this.routeForm.routeId, this.routeForm.dropPoint, this.routeForm.dropAddress).subscribe({
           next: () => {
-            this.successMessage.set('Pickup and drop points added.');
-            this.routeForm.pickupPoint = '';
-            this.routeForm.pickupAddress = '';
-            this.routeForm.dropPoint = '';
-            this.routeForm.dropAddress = '';
+            console.log('Pickup and drop points successfully updated');
+            this.operatorService.getPreferredRoutes(this.operatorId).subscribe({
+              next: (data) => {
+                this.preferredRoutes.set(data || []);
+                this.successMessage.set('Pickup and drop points updated successfully.');
+                setTimeout(() => {
+                  this.onRouteSelectedForPoints();
+                }, 500);
+              }
+            });
           },
           error: (err) => this.errorMessage.set(err.message)
         });
@@ -258,34 +317,92 @@ export class OperatorDashboardComponent implements OnInit {
 
   createTrip(): void {
     this.clearMessages();
-    if (!this.tripForm.busId || !this.tripForm.routeId || !this.tripForm.departureTime || !this.tripForm.arrivalTime) {
-      this.errorMessage.set('Please fill out all required trip fields.');
+    console.log('Attempting to create trip with form data:', this.tripForm);
+
+    const tripType = Number(this.tripForm.tripType);
+    
+    if (!this.tripForm.busId || !this.tripForm.routeId || this.tripForm.basePrice <= 0) {
+      this.errorMessage.set('Please fill out all required trip fields (Bus, Route, Price).');
       return;
     }
 
-    const payload = {
+    const payload: any = {
       busId: this.tripForm.busId,
       routeId: this.tripForm.routeId,
-      departureTime: this.tripForm.departureTime,
-      arrivalTime: this.tripForm.arrivalTime,
       basePrice: Number(this.tripForm.basePrice),
-      source: this.tripForm.source,
-      destination: this.tripForm.destination,
-      isVariablePrice: false,
-      useFixedSeatPricing: true,
-      tripType: Number(this.tripForm.tripType),
-      daysOfWeek: this.tripForm.daysOfWeek.join(',')
+      tripType: tripType,
+      daysOfWeek: tripType === 2 ? this.tripForm.daysOfWeek.join(',') : null
     };
+
+    if (tripType === 2) { // Daily
+      const startDate = this.tripForm.startDate;
+      const depTime = this.tripForm.departureTime;
+      const arrTime = this.tripForm.arrivalTime;
+
+      if (!startDate || startDate === '' || !depTime || depTime === '' || !arrTime || arrTime === '') {
+        console.warn('Daily trip validation failed:', { startDate, depTime, arrTime });
+        this.errorMessage.set('Please fill in all required Daily Trip fields.');
+        return;
+      }
+      payload.startDate = startDate;
+      payload.endDate = this.tripForm.endDate || null;
+      payload.departureTime = depTime;
+      payload.arrivalTime = arrTime;
+    } else { // OneTime
+      const depDT = this.tripForm.departureDateTime;
+      const arrDT = this.tripForm.arrivalDateTime;
+
+      if (!depDT || depDT === '' || !arrDT || arrDT === '') {
+        console.warn('One-time trip validation failed:', { depDT, arrDT });
+        this.errorMessage.set('Please fill in both Departure and Arrival Date/Time.');
+        return;
+      }
+      payload.departureDateTime = depDT;
+      payload.arrivalDateTime = arrDT;
+    }
 
     this.operatorService.createTrip(this.operatorId, payload).subscribe({
       next: () => {
         this.successMessage.set('Trip created successfully.');
-        this.tripForm.departureTime = '';
-        this.tripForm.arrivalTime = '';
+        this.resetTripForm();
         this.loadAll();
       },
       error: (err) => this.errorMessage.set(err.message)
     });
+  }
+
+  removeTrip(tripId: string): void {
+    if (!confirm('Are you sure you want to delete this trip? This will prevent new bookings but keep historical records.')) {
+      return;
+    }
+    
+    this.operatorService.deleteTrip(this.operatorId, tripId).subscribe({
+      next: () => {
+        this.successMessage.set('Trip deleted successfully.');
+        this.loadAll();
+      },
+      error: (err) => this.errorMessage.set(err.message || 'Error deleting trip')
+    });
+  }
+
+  resetTripForm() {
+    const busId = this.tripForm.busId;
+    const routeId = this.tripForm.routeId;
+    this.tripForm = {
+      busId,
+      routeId,
+      departureDateTime: '',
+      arrivalDateTime: '',
+      startDate: '',
+      endDate: '',
+      departureTime: '',
+      arrivalTime: '',
+      basePrice: 0,
+      source: '',
+      destination: '',
+      tripType: 1,
+      daysOfWeek: []
+    };
   }
 
   logout(): void {

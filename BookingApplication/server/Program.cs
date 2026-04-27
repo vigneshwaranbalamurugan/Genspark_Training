@@ -54,7 +54,11 @@ builder.Services.AddAuthorization();
 
 // Add services to the container.
 builder.Services.AddOpenApi();
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 
 // Register JWT Service
 builder.Services.AddSingleton<server.Services.IJwtService>(sp =>

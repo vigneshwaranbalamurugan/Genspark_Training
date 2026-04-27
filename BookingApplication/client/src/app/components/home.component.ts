@@ -67,13 +67,14 @@ export class HomeComponent {
     this.expandedTripId.set(this.expandedTripId() === tripId ? null : tripId);
   }
 
-  bookTrip(trip: TripSummary): void {
+  bookTrip(trip: TripSummary, isReturn: boolean = false): void {
+    const travelDate = isReturn ? this.searchForm.value.returnDate : this.searchForm.value.date;
     if (!this.authService.isAuthenticated()) {
-      this.router.navigate(['/login'], { queryParams: { redirect: `/book/${trip.tripId}` } });
+      this.router.navigate(['/login'], { queryParams: { redirect: `/book/${trip.tripId}?date=${travelDate}` } });
       return;
     }
 
-    this.router.navigate(['/book', trip.tripId]);
+    this.router.navigate(['/book', trip.tripId], { queryParams: { date: travelDate } });
   }
 
   get totalTrips(): number {

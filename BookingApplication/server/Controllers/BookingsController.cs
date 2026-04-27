@@ -106,6 +106,21 @@ public sealed class BookingsController : ControllerBase
         }
     }
 
+    [HttpGet("{bookingId:guid}/ticket/download")]
+    public IActionResult DownloadTicket([FromRoute] Guid bookingId, [FromQuery] string userEmail)
+    {
+        try
+        {
+            var (content, fileName) = transportService.GenerateTicketFile(bookingId, userEmail);
+            Response.Headers.Append("Content-Disposition", $"attachment; filename=\"{fileName}\"");
+            return File(content, "application/pdf");
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
+        }
+    }
+
     [HttpPost("payment/initiate")]
     public ActionResult<PaymentInitiateResponse> InitiatePayment([FromBody] PaymentInitiateRequest request)
     {

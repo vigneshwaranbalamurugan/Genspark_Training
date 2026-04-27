@@ -12,6 +12,7 @@ import { OperatorLoginComponent } from './components/operator-login.component';
 import { OperatorDashboardComponent } from './components/operator-dashboard.component';
 import { AdminLoginComponent } from './components/admin-login.component';
 import { AdminDashboardComponent } from './components/admin-dashboard.component';
+import { OperatorRegisterComponent } from './components/operator-register.component';
 
 export const routes: Routes = [
   {
@@ -49,6 +50,10 @@ export const routes: Routes = [
   {
     path: 'unauthorized',
     component: UnauthorizedComponent
+  },
+  {
+    path: 'operator/register',
+    component: OperatorRegisterComponent
   },
   {
     path: 'operator/login',

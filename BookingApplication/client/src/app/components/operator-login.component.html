@@ -27,6 +27,10 @@
       <button type="submit" [disabled]="loading()">
         @if (loading()) { Signing in... } @else { Sign In as Operator }
       </button>
+
+      <div class="footer" style="text-align: center; margin-top: 1.5rem; font-size: 0.95rem; color: #586578;">
+        New operator? <a routerLink="/operator/register" style="color: #0f5db8; font-weight: 600; text-decoration: none;">Register your company</a>
+      </div>
     </form>
   </div>
 </div>

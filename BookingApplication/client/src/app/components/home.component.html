@@ -100,7 +100,7 @@
                 </div>
                 <div class="flex flex-col gap-3 sm:flex-row">
                   <button class="rounded-2xl border border-slate-300 px-4 py-3 font-semibold text-slate-700 hover:bg-slate-100" (click)="toggleTrip(trip.tripId)">
-                    {{ expandedTripId() === trip.tripId ? 'Hide' : 'Seat info' }}
+                    {{ expandedTripId() === trip.tripId ? 'Hide' : 'Show info' }}
                   </button>
                   <button class="rounded-2xl bg-blue-600 px-5 py-3 font-bold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700" (click)="bookTrip(trip)">
                     Book now
@@ -127,6 +127,39 @@
                     <p class="mt-1 text-lg font-semibold">₹{{ trip.platformFee }}</p>
                   </div>
                 </div>
+
+                @if (trip.pickupPoints?.length || trip.dropPoints?.length) {
+                  <div class="mt-4 grid gap-4 rounded-2xl bg-white p-4 sm:grid-cols-2">
+                    <div>
+                      <p class="text-xs font-bold uppercase tracking-widest text-emerald-600 mb-2">Pickup Points</p>
+                      <ul class="space-y-2">
+                        @for (p of trip.pickupPoints; track p.pointId) {
+                          <li class="text-sm">
+                            <span class="font-bold">📍 {{ p.location }}</span>
+                            @if (p.address) { <span class="text-slate-500"> - {{ p.address }}</span> }
+                          </li>
+                        }
+                        @if (!trip.pickupPoints?.length) {
+                          <li class="text-sm text-slate-400 italic">No specific pickup points</li>
+                        }
+                      </ul>
+                    </div>
+                    <div>
+                      <p class="text-xs font-bold uppercase tracking-widest text-orange-600 mb-2">Drop Points</p>
+                      <ul class="space-y-2">
+                        @for (d of trip.dropPoints; track d.pointId) {
+                          <li class="text-sm">
+                            <span class="font-bold">🏁 {{ d.location }}</span>
+                            @if (d.address) { <span class="text-slate-500"> - {{ d.address }}</span> }
+                          </li>
+                        }
+                        @if (!trip.dropPoints?.length) {
+                          <li class="text-sm text-slate-400 italic">No specific drop points</li>
+                        }
+                      </ul>
+                    </div>
+                  </div>
+                }
               }
             </article>
           }
@@ -142,7 +175,7 @@
                     <p class="font-semibold">{{ trip.busName }}</p>
                     <p class="text-sm text-slate-600">{{ trip.source }} → {{ trip.destination }} | {{ trip.departureTime | date:'short' }}</p>
                   </div>
-                  <button class="rounded-2xl bg-orange-500 px-4 py-2 font-semibold text-white hover:bg-orange-600" (click)="bookTrip(trip)">Book return</button>
+                  <button class="rounded-2xl bg-orange-500 px-4 py-2 font-semibold text-white hover:bg-orange-600" (click)="bookTrip(trip, true)">Book return</button>
                 </div>
               }
             </div>
