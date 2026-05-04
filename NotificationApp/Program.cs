@@ -5,8 +5,8 @@ using NotificationSystem.Services;
 
 namespace NotificationSystem{
     internal class Program{
-        private readonly IUserInteract userInteract;
-        private readonly NotificationService notificationService;
+        IUserInteract userInteract;
+        NotificationService notificationService;
 
         public Program(){
             userInteract = new UserService();
