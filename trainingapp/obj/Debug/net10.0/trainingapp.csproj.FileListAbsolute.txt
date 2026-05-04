@@ -1,0 +1,15 @@
+/Users/vigneshwaran/Documents/GenSparkTraining/trainingapp/obj/Debug/net10.0/trainingapp.GeneratedMSBuildEditorConfig.editorconfig
+/Users/vigneshwaran/Documents/GenSparkTraining/trainingapp/obj/Debug/net10.0/trainingapp.AssemblyInfoInputs.cache
+/Users/vigneshwaran/Documents/GenSparkTraining/trainingapp/obj/Debug/net10.0/trainingapp.AssemblyInfo.cs
+/Users/vigneshwaran/Documents/GenSparkTraining/trainingapp/obj/Debug/net10.0/trainingapp.csproj.CoreCompileInputs.cache
+/Users/vigneshwaran/Documents/GenSparkTraining/trainingapp/obj/Debug/net10.0/trainingapp.sourcelink.json
+/Users/vigneshwaran/Documents/GenSparkTraining/trainingapp/bin/Debug/net10.0/trainingapp
+/Users/vigneshwaran/Documents/GenSparkTraining/trainingapp/bin/Debug/net10.0/trainingapp.deps.json
+/Users/vigneshwaran/Documents/GenSparkTraining/trainingapp/bin/Debug/net10.0/trainingapp.runtimeconfig.json
+/Users/vigneshwaran/Documents/GenSparkTraining/trainingapp/bin/Debug/net10.0/trainingapp.dll
+/Users/vigneshwaran/Documents/GenSparkTraining/trainingapp/bin/Debug/net10.0/trainingapp.pdb
+/Users/vigneshwaran/Documents/GenSparkTraining/trainingapp/obj/Debug/net10.0/trainingapp.dll
+/Users/vigneshwaran/Documents/GenSparkTraining/trainingapp/obj/Debug/net10.0/refint/trainingapp.dll
+/Users/vigneshwaran/Documents/GenSparkTraining/trainingapp/obj/Debug/net10.0/trainingapp.pdb
+/Users/vigneshwaran/Documents/GenSparkTraining/trainingapp/obj/Debug/net10.0/trainingapp.genruntimeconfig.cache
+/Users/vigneshwaran/Documents/GenSparkTraining/trainingapp/obj/Debug/net10.0/ref/trainingapp.dll
