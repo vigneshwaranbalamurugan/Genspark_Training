@@ -2,6 +2,7 @@ using NotificationSystem.Interfaces;
 using NotificationSystem.Models;
 
 namespace NotificationSystem.Services{
+    // Notification Service to send notification to user based on notification type
     internal class NotificationService{
         
         public void Send(User userToNotify,string message,int notificationType){

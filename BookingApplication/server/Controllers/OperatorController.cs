@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using server.Application.Services.Interfaces;
 using server.Models;
-using server.Services;
 
 namespace server.Controllers;
 
@@ -10,278 +10,152 @@ namespace server.Controllers;
 [Authorize(Roles = "Operator")]
 public sealed class OperatorController : ControllerBase
 {
-    private readonly ITransportService transportService;
-    private readonly IJwtService jwtService;
+    private readonly IOperatorService _operatorService;
+    private readonly IAdminService _adminService;
 
-    public OperatorController(ITransportService transportService, IJwtService jwtService)
+    public OperatorController(IOperatorService operatorService, IAdminService adminService)
     {
-        this.transportService = transportService;
-        this.jwtService = jwtService;
+        _operatorService = operatorService;
+        _adminService = adminService;
     }
 
     [AllowAnonymous]
     [HttpPost("register")]
-    public ActionResult<OperatorResponse> Register([FromBody] OperatorRegisterRequest request)
+    public async Task<ActionResult<OperatorResponse>> Register([FromBody] OperatorRegisterRequest request)
     {
-        try
-        {
-            return Ok(transportService.RegisterOperator(request));
-        }
-        catch (InvalidOperationException exception)
-        {
-            return Conflict(new { message = exception.Message });
-        }
+        return Ok(await _operatorService.RegisterOperatorAsync(request));
     }
 
     [HttpGet("{operatorId:guid}/buses")]
-    public ActionResult<IEnumerable<BusResponse>> Buses([FromRoute] Guid operatorId)
+    public async Task<ActionResult<IEnumerable<BusResponse>>> Buses([FromRoute] Guid operatorId)
     {
-        return Ok(transportService.GetOperatorBuses(operatorId));
+        return Ok(await _operatorService.GetOperatorBusesAsync(operatorId));
     }
 
     [HttpGet("routes")]
-    public ActionResult<IEnumerable<RouteResponse>> Routes()
+    public async Task<ActionResult<IEnumerable<RouteResponse>>> Routes()
     {
-        return Ok(transportService.GetRoutes());
+        return Ok(await _adminService.GetRoutesAsync());
     }
 
     [HttpPost("buses")]
-    public ActionResult<BusResponse> AddBus([FromBody] BusRequest request)
+    public async Task<ActionResult<BusResponse>> AddBus([FromBody] BusRequest request)
     {
-        try
-        {
-            return Ok(transportService.AddBus(request));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
-        catch (InvalidOperationException exception)
-        {
-            return BadRequest(new { message = exception.Message });
-        }
+        return Ok(await _operatorService.AddBusAsync(request));
     }
 
     [HttpPost("{operatorId:guid}/buses/{busId:guid}/temporary-unavailable")]
-    public ActionResult<BusResponse> SetTemporaryUnavailable([FromRoute] Guid operatorId, [FromRoute] Guid busId, [FromQuery] bool unavailable)
+    public async Task<ActionResult<BusResponse>> SetTemporaryUnavailable([FromRoute] Guid operatorId, [FromRoute] Guid busId, [FromQuery] bool unavailable)
     {
-        try
-        {
-            return Ok(transportService.SetBusTemporaryAvailability(operatorId, busId, unavailable));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
+        return Ok(await _operatorService.SetBusTemporaryAvailabilityAsync(operatorId, busId, unavailable));
     }
 
     [HttpDelete("{operatorId:guid}/buses/{busId:guid}")]
-    public IActionResult RemoveBus([FromRoute] Guid operatorId, [FromRoute] Guid busId)
+    public async Task<IActionResult> RemoveBus([FromRoute] Guid operatorId, [FromRoute] Guid busId)
     {
-        try
-        {
-            transportService.RemoveBus(operatorId, busId);
-            return NoContent();
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
+        await _operatorService.RemoveBusAsync(operatorId, busId);
+        return NoContent();
     }
 
     [HttpPost("trips")]
-    public ActionResult<TripSummary> AddTrip([FromBody] TripCreateRequest request)
+    public async Task<ActionResult<TripSummary>> AddTrip([FromBody] TripCreateRequest request)
     {
-        try
-        {
-            return Ok(transportService.AddTrip(request));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
-        catch (InvalidOperationException exception)
-        {
-            return BadRequest(new { message = exception.Message });
-        }
+        return Ok(await _operatorService.AddTripAsync(request));
     }
 
     [HttpGet("{operatorId:guid}/dashboard")]
-    public ActionResult<OperatorDashboardResponse> Dashboard([FromRoute] Guid operatorId)
+    public async Task<ActionResult<OperatorDashboardResponse>> Dashboard([FromRoute] Guid operatorId)
     {
-        try
-        {
-            return Ok(transportService.GetOperatorDashboard(operatorId));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
+        return Ok(await _operatorService.GetOperatorDashboardAsync(operatorId));
     }
 
     [AllowAnonymous]
     [HttpPost("login")]
-    public ActionResult<OperatorLoginResponse> Login([FromBody] OperatorLoginRequest request)
+    public async Task<ActionResult<OperatorLoginResponse>> Login([FromBody] OperatorLoginRequest request)
     {
-        try
-        {
-            var response = transportService.OperatorLogin(request);
-            response.JwtToken = jwtService.GenerateToken(response.Email, UserRole.Operator.ToString());
-            return Ok(response);
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
-        catch (InvalidOperationException exception)
-        {
-            return Unauthorized(new { message = exception.Message });
-        }
+        return Ok(await _operatorService.OperatorLoginAsync(request));
     }
 
     [HttpPost("{operatorId:guid}/buses/register")]
-    public ActionResult<BusWithNumberResponse> RegisterBus([FromRoute] Guid operatorId, [FromBody] BusRegistrationRequest request)
+    public async Task<ActionResult<BusWithNumberResponse>> RegisterBus([FromRoute] Guid operatorId, [FromBody] BusRegistrationRequest request)
     {
-        try
-        {
-            return Ok(transportService.AddBusWithNumber(operatorId, request));
-        }
-        catch (InvalidOperationException exception)
-        {
-            return Conflict(new { message = exception.Message });
-        }
+        return Ok(await _operatorService.AddBusWithNumberAsync(operatorId, request));
     }
 
     [HttpGet("{operatorId:guid}/bookings")]
-    public ActionResult<IEnumerable<OperatorBookingView>> GetBookings([FromRoute] Guid operatorId, [FromQuery] Guid? busId)
+    public async Task<ActionResult<IEnumerable<OperatorBookingView>>> GetBookings([FromRoute] Guid operatorId, [FromQuery] Guid? busId)
     {
-        return Ok(transportService.GetOperatorBookings(operatorId, busId));
+        return Ok(await _operatorService.GetOperatorBookingsAsync(operatorId, busId));
     }
 
     [HttpGet("{operatorId:guid}/revenue")]
-    public ActionResult<OperatorRevenueResponse> GetRevenue([FromRoute] Guid operatorId)
+    public async Task<ActionResult<OperatorRevenueResponse>> GetRevenue([FromRoute] Guid operatorId)
     {
-        try
-        {
-            return Ok(transportService.GetOperatorRevenue(operatorId));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
+        return Ok(await _operatorService.GetOperatorRevenueAsync(operatorId));
     }
 
     [HttpPost("{operatorId:guid}/preferred-routes")]
-    public ActionResult<PreferredRouteResponse> AddPreferredRoute([FromRoute] Guid operatorId, [FromBody] PreferredRouteRequest request)
+    public async Task<ActionResult<PreferredRouteResponse>> AddPreferredRoute([FromRoute] Guid operatorId, [FromBody] PreferredRouteRequest request)
     {
-        try
-        {
-            return Ok(transportService.AddPreferredRoute(operatorId, request));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
-        catch (InvalidOperationException exception)
-        {
-            return Conflict(new { message = exception.Message });
-        }
+        return Ok(await _operatorService.AddPreferredRouteAsync(operatorId, request));
     }
 
     [HttpGet("{operatorId:guid}/preferred-routes")]
-    public ActionResult<List<PreferredRouteResponse>> GetPreferredRoutes([FromRoute] Guid operatorId)
+    public async Task<ActionResult<List<PreferredRouteResponse>>> GetPreferredRoutes([FromRoute] Guid operatorId)
     {
-        return Ok(transportService.GetOperatorPreferredRoutes(operatorId));
+        return Ok(await _operatorService.GetOperatorPreferredRoutesAsync(operatorId));
     }
 
     [HttpPost("{operatorId:guid}/routes/{routeId:guid}/pickup-points")]
-    public ActionResult<PickupDropPointResponse> AddPickupPoint([FromRoute] Guid operatorId, [FromRoute] Guid routeId, [FromBody] PickupDropPointRequest request)
+    public async Task<ActionResult<PickupDropPointResponse>> AddPickupPoint([FromRoute] Guid operatorId, [FromRoute] Guid routeId, [FromBody] PickupDropPointRequest request)
     {
-        try
-        {
-            return Ok(transportService.AddPickupDropPoint(operatorId, routeId, true, request));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
+        return Ok(await _operatorService.AddPickupDropPointAsync(operatorId, routeId, true, request));
     }
 
     [HttpPost("{operatorId:guid}/routes/{routeId:guid}/drop-points")]
-    public ActionResult<PickupDropPointResponse> AddDropPoint([FromRoute] Guid operatorId, [FromRoute] Guid routeId, [FromBody] PickupDropPointRequest request)
+    public async Task<ActionResult<PickupDropPointResponse>> AddDropPoint([FromRoute] Guid operatorId, [FromRoute] Guid routeId, [FromBody] PickupDropPointRequest request)
     {
-        try
-        {
-            return Ok(transportService.AddPickupDropPoint(operatorId, routeId, false, request));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
+        return Ok(await _operatorService.AddPickupDropPointAsync(operatorId, routeId, false, request));
     }
 
     [HttpGet("{operatorId:guid}/routes/{routeId:guid}/pickup-points")]
-    public ActionResult<IEnumerable<PickupDropPointResponse>> GetPickupPoints([FromRoute] Guid operatorId, [FromRoute] Guid routeId)
+    public async Task<ActionResult<IEnumerable<PickupDropPointResponse>>> GetPickupPoints([FromRoute] Guid operatorId, [FromRoute] Guid routeId)
     {
-        return Ok(transportService.GetPickupDropPoints(operatorId, routeId, true));
+        return Ok(await _operatorService.GetPickupDropPointsAsync(operatorId, routeId, true));
     }
 
     [HttpGet("{operatorId:guid}/routes/{routeId:guid}/drop-points")]
-    public ActionResult<IEnumerable<PickupDropPointResponse>> GetDropPoints([FromRoute] Guid operatorId, [FromRoute] Guid routeId)
+    public async Task<ActionResult<IEnumerable<PickupDropPointResponse>>> GetDropPoints([FromRoute] Guid operatorId, [FromRoute] Guid routeId)
     {
-        return Ok(transportService.GetPickupDropPoints(operatorId, routeId, false));
+        return Ok(await _operatorService.GetPickupDropPointsAsync(operatorId, routeId, false));
     }
 
     [HttpPost("{operatorId:guid}/trips/create")]
-    public ActionResult<TripSummary> CreateTripWithDetails([FromRoute] Guid operatorId, [FromBody] TripCreateRequestWithDetails request)
+    public async Task<ActionResult<TripSummary>> CreateTripWithDetails([FromRoute] Guid operatorId, [FromBody] TripCreateRequestWithDetails request)
     {
-        try
-        {
-            request.OperatorId = operatorId;
-            return Ok(transportService.AddTripWithDetails(operatorId, request));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
-        catch (InvalidOperationException exception)
-        {
-            return BadRequest(new { message = exception.Message });
-        }
+        request.OperatorId = operatorId;
+        return Ok(await _operatorService.AddTripWithDetailsAsync(operatorId, request));
     }
 
+    public class DisableReasonRequest { public string Reason { get; set; } = string.Empty; }
+
     [HttpPost("{operatorId:guid}/buses/{busId:guid}/request-disable")]
-    public IActionResult RequestBusDisable([FromRoute] Guid operatorId, [FromRoute] Guid busId, [FromBody] dynamic request)
+    public async Task<IActionResult> RequestBusDisable([FromRoute] Guid operatorId, [FromRoute] Guid busId, [FromBody] DisableReasonRequest request)
     {
-        try
-        {
-            var reason = request?.reason ?? "No reason provided";
-            transportService.RequestBusDisable(operatorId, busId, reason.ToString());
-            return Ok(new { message = "Request submitted to admin" });
-        }
-        catch (InvalidOperationException exception)
-        {
-            return BadRequest(new { message = exception.Message });
-        }
+        await _operatorService.RequestBusDisableAsync(operatorId, busId, request.Reason ?? "No reason provided");
+        return Ok(new { message = "Request submitted to admin" });
     }
 
     [HttpGet("{operatorId:guid}/trips")]
-    public ActionResult<IEnumerable<TripSummary>> GetTrips([FromRoute] Guid operatorId)
+    public async Task<ActionResult<IEnumerable<TripSummary>>> GetTrips([FromRoute] Guid operatorId)
     {
-        return Ok(transportService.GetOperatorTrips(operatorId));
+        return Ok(await _operatorService.GetOperatorTripsAsync(operatorId));
     }
 
     [HttpDelete("{operatorId:guid}/trips/{tripId:guid}")]
-    public IActionResult DeleteTrip([FromRoute] Guid operatorId, [FromRoute] Guid tripId)
+    public async Task<IActionResult> DeleteTrip([FromRoute] Guid operatorId, [FromRoute] Guid tripId)
     {
-        try
-        {
-            transportService.DeleteTrip(operatorId, tripId);
-            return NoContent();
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
+        await _operatorService.DeleteTripAsync(operatorId, tripId);
+        return NoContent();
     }
 }

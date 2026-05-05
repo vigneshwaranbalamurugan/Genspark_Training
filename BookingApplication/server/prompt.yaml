@@ -1,0 +1,135 @@
+version: 1.0
+title: "DotNet Backend Enhancement Prompt"
+description: >
+  Comprehensive guidelines to refactor and enhance an existing .NET backend
+  to meet modern industry standards including modular architecture, clean code,
+  database optimization, and advanced OOP principles.
+
+objectives:
+  - Improve code modularity and maintainability
+  - Apply SOLID principles and clean architecture
+  - Optimize database usage with SQL best practices
+  - Align with enterprise-grade backend standards
+
+architecture:
+  pattern: "Clean Architecture"
+  layers:
+    - Presentation (Controllers / API Layer)
+    - Application (Services / Business Logic)
+    - Domain (Models / Entities / Interfaces)
+    - Infrastructure (Repositories / DB / External Services)
+
+modularity:
+  structure:
+    Models:
+      description: "Represents domain entities and DTOs"
+      rules:
+        - Use POCO classes
+        - Separate Entity vs DTO models
+        - Apply data annotations where needed
+
+    Services:
+      description: "Business logic layer"
+      rules:
+        - Implement service interfaces
+        - Avoid direct DB access
+        - Keep methods single-responsibility
+
+    Repositories:
+      description: "Data access layer"
+      rules:
+        - Use Repository Pattern
+        - Implement Unit of Work where applicable
+        - Abstract DB logic from services
+
+    Interfaces:
+      description: "Contracts for dependency injection"
+      rules:
+        - Prefix with 'I'
+        - Separate per layer (IService, IRepository)
+        - Ensure loose coupling
+
+oops_principles:
+  encapsulation:
+    - Use private setters where possible
+    - Expose behavior, not data
+  inheritance:
+    - Use base classes for shared logic
+    - Avoid deep inheritance chains
+  polymorphism:
+    - Implement method overriding and interfaces
+    - Use dependency injection for runtime behavior
+  abstraction:
+    - Hide implementation details via interfaces
+
+solid_principles:
+  S: "Single Responsibility Principle"
+  O: "Open/Closed Principle"
+  L: "Liskov Substitution Principle"
+  I: "Interface Segregation Principle"
+  D: "Dependency Inversion Principle"
+
+design_patterns:
+  - Repository Pattern
+  - Unit of Work
+  - Dependency Injection
+  - Factory Pattern
+  - Strategy Pattern (for polymorphic behavior)
+  - Mediator Pattern (optional for CQRS)
+
+database_enhancements:
+  sql_joins:
+    rules:
+      - Use INNER JOIN for required relationships
+      - Use LEFT JOIN for optional data
+      - Avoid SELECT *
+      - Ensure proper indexing on join columns
+
+  stored_procedures:
+    rules:
+      - Use for complex queries and transactions
+      - Parameterize all inputs
+      - Avoid dynamic SQL unless necessary
+      - Handle exceptions with TRY-CATCH
+
+  optimization:
+    - Add indexes on frequently queried columns
+    - Use query execution plans
+    - Normalize up to 3NF, denormalize where needed
+    - Use pagination (OFFSET-FETCH)
+
+  transactions:
+    - Ensure atomic operations
+    - Use BEGIN TRANSACTION / COMMIT / ROLLBACK
+
+coding_standards:
+  naming_conventions:
+    - PascalCase for classes and methods
+    - camelCase for variables
+    - Prefix interfaces with 'I'
+
+  best_practices:
+    - Avoid magic numbers
+    - Use async/await for I/O operations
+    - Implement global exception handling middleware
+    - Use logging (Serilog / NLog)
+
+performance:
+  - Optimize LINQ queries
+  - Avoid N+1 query problems
+  - Use async database calls
+
+security:
+  - Implement authentication (JWT / OAuth2)
+  - Use HTTPS everywhere
+  - Validate all inputs
+  - Prevent SQL Injection (use parameterized queries)
+  - Implement role-based authorization
+
+output_expectations:
+  - Refactored modular codebase
+  - Clean separation of concerns
+  - Optimized SQL queries and stored procedures
+  - Improved performance and scalability
+  - Production-ready backend aligned with industry standards
+

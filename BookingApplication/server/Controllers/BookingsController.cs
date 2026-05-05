@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using server.Application.Services.Interfaces;
 using server.Models;
-using server.Services;
 
 namespace server.Controllers;
 
@@ -8,142 +8,74 @@ namespace server.Controllers;
 [Route("api/bookings")]
 public sealed class BookingsController : ControllerBase
 {
-    private readonly ITransportService transportService;
+    private readonly IBookingService _bookingService;
 
-    public BookingsController(ITransportService transportService)
+    public BookingsController(IBookingService bookingService)
     {
-        this.transportService = transportService;
+        _bookingService = bookingService;
     }
 
     [HttpPost("lock-seats")]
-    public ActionResult<SeatLockResponse> LockSeats([FromBody] LockSeatsRequest request)
+    public async Task<ActionResult<SeatLockResponse>> LockSeats([FromBody] LockSeatsRequest request)
     {
-        try
-        {
-            return Ok(transportService.LockSeats(request));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
-        catch (InvalidOperationException exception)
-        {
-            return Conflict(new { message = exception.Message });
-        }
+        return Ok(await _bookingService.LockSeatsAsync(request));
     }
 
     [HttpPost]
-    public ActionResult<BookingResponse> Create([FromBody] CreateBookingRequest request)
+    public async Task<ActionResult<BookingResponse>> Create([FromBody] CreateBookingRequest request)
     {
-        try
-        {
-            return Ok(transportService.CreateBooking(request));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
-        catch (InvalidOperationException exception)
-        {
-            return BadRequest(new { message = exception.Message });
-        }
+        return Ok(await _bookingService.CreateBookingAsync(request));
     }
 
     [HttpGet("history/{userEmail}")]
-    public ActionResult<IEnumerable<BookingResponse>> History([FromRoute] string userEmail)
+    public async Task<ActionResult<IEnumerable<BookingResponse>>> History([FromRoute] string userEmail)
     {
-        return Ok(transportService.GetBookingsByUser(userEmail));
+        return Ok(await _bookingService.GetBookingsByUserAsync(userEmail));
     }
 
     [HttpPost("{bookingId:guid}/cancel")]
-    public ActionResult<CancelBookingResponse> Cancel([FromRoute] Guid bookingId, [FromQuery] string userEmail)
+    public async Task<ActionResult<CancelBookingResponse>> Cancel([FromRoute] Guid bookingId, [FromQuery] string userEmail)
     {
-        try
-        {
-            return Ok(transportService.CancelBooking(bookingId, userEmail));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
-        catch (InvalidOperationException exception)
-        {
-            return BadRequest(new { message = exception.Message });
-        }
+        return Ok(await _bookingService.CancelBookingAsync(bookingId, userEmail));
     }
 
     [HttpGet("{userEmail}/enhanced-history")]
-    public ActionResult<IEnumerable<EnhancedBookingResponse>> GetEnhancedHistory([FromRoute] string userEmail, [FromQuery] BookingsHistoryFilter.HistoryType type = BookingsHistoryFilter.HistoryType.All)
+    public async Task<ActionResult<IEnumerable<EnhancedBookingResponse>>> GetEnhancedHistory([FromRoute] string userEmail, [FromQuery] BookingsHistoryFilter.HistoryType type = BookingsHistoryFilter.HistoryType.All)
     {
         var filter = new BookingsHistoryFilter { UserEmail = userEmail, Type = type };
-        var bookings = transportService.GetBookingsHistory(filter);
+        var bookings = await _bookingService.GetBookingsHistoryAsync(filter);
         return Ok(bookings);
     }
 
     [HttpGet("{bookingId:guid}/enhanced")]
-    public ActionResult<EnhancedBookingResponse> GetEnhanced([FromRoute] Guid bookingId, [FromQuery] string userEmail)
+    public async Task<ActionResult<EnhancedBookingResponse>> GetEnhanced([FromRoute] Guid bookingId, [FromQuery] string userEmail)
     {
-        try
-        {
-            return Ok(transportService.GetEnhancedBooking(bookingId, userEmail));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
+        return Ok(await _bookingService.GetEnhancedBookingAsync(bookingId, userEmail));
     }
 
     [HttpGet("{bookingId:guid}/ticket")]
-    public ActionResult<TicketResponse> GetTicket([FromRoute] Guid bookingId, [FromQuery] string userEmail)
+    public async Task<ActionResult<TicketResponse>> GetTicket([FromRoute] Guid bookingId, [FromQuery] string userEmail)
     {
-        try
-        {
-            return Ok(transportService.GetTicket(bookingId, userEmail));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
+        return Ok(await _bookingService.GetTicketAsync(bookingId, userEmail));
     }
 
     [HttpGet("{bookingId:guid}/ticket/download")]
-    public IActionResult DownloadTicket([FromRoute] Guid bookingId, [FromQuery] string userEmail)
+    public async Task<IActionResult> DownloadTicket([FromRoute] Guid bookingId, [FromQuery] string userEmail)
     {
-        try
-        {
-            var (content, fileName) = transportService.GenerateTicketFile(bookingId, userEmail);
-            Response.Headers.Append("Content-Disposition", $"attachment; filename=\"{fileName}\"");
-            return File(content, "application/pdf");
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
+        var (content, fileName) = await _bookingService.GenerateTicketFileAsync(bookingId, userEmail);
+        Response.Headers.Append("Content-Disposition", $"attachment; filename=\"{fileName}\"");
+        return File(content, "application/pdf");
     }
 
     [HttpPost("payment/initiate")]
-    public ActionResult<PaymentInitiateResponse> InitiatePayment([FromBody] PaymentInitiateRequest request)
+    public async Task<ActionResult<PaymentInitiateResponse>> InitiatePayment([FromBody] PaymentInitiateRequest request)
     {
-        try
-        {
-            return Ok(transportService.InitiatePayment(request));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
+        return Ok(await _bookingService.InitiatePaymentAsync(request));
     }
 
     [HttpPost("payment/verify")]
-    public ActionResult<PaymentVerifyResponse> VerifyPayment([FromBody] PaymentVerifyRequest request)
+    public async Task<ActionResult<PaymentVerifyResponse>> VerifyPayment([FromBody] PaymentVerifyRequest request)
     {
-        try
-        {
-            return Ok(transportService.VerifyPayment(request));
-        }
-        catch (Exception exception)
-        {
-            return BadRequest(new { message = exception.Message });
-        }
+        return Ok(await _bookingService.VerifyPaymentAsync(request));
     }
 }

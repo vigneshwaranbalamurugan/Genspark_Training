@@ -1,6 +1,8 @@
 using System;
 
 namespace NotificationSystem.Models{
+
+    // User Class
     internal class User{
         public int UserId{get;set;}
         public string UserName{get;set;}

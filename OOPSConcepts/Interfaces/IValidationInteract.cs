@@ -6,5 +6,7 @@ using System.Threading.Tasks;
 
 namespace UnderstandingOOPSApp.Models
 {
-    internal interface IValidation
+    internal interface IValidation{
+        bool IsValid(string value);
+    }
 }

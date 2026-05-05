@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace UnderstandingOOPSApp.Models
 {
-    internal class Account
+    internal class Account:IComparable<Account>,IEquatable<Account>
     {
         /*private string accountNumber;
 
@@ -64,6 +64,42 @@ namespace UnderstandingOOPSApp.Models
         {
             return $"Account Number : {AccountNumber}\nAccount Holder Name : {NameOnAccount}\nPhone Number : {Phone}\n" +
                 $"Email : {Email}\nBalance : ${Balance}";
+        }
+
+        // Implementing CompareTo method to compare two accounts based on account number used for sorting
+        public int CompareTo(Account? other)
+        {
+            return this.AccountNumber.CompareTo(other.AccountNumber);
+        }
+
+        // Operator overloading for comparing two accounts based on account number
+        public static bool operator == (Account acc1, Account acc2)
+        {
+            return acc1.AccountNumber == acc2.AccountNumber;
+        }
+        public static bool operator != (Account acc1, Account acc2)
+        {
+            return acc1.AccountNumber != acc2.AccountNumber;
+        }
+
+        public override bool Equals(object? obj)
+        {
+            if (obj == null || GetType() != obj.GetType())
+                return false;
+            Account acc = (Account)obj;
+            return this.AccountNumber == acc.AccountNumber;
+        }
+
+        public bool Equals(Account? other)
+        {
+            if (other == null)
+                return false;
+            return this.AccountNumber == other.AccountNumber;
+        }
+        
+        public override int GetHashCode()
+        {
+            return AccountNumber.GetHashCode();
         }
     }
 }

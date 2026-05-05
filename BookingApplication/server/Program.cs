@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using server.Infrastructure;
+using server.Application;
+using server.Infrastructure.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 var postgreSqlConnection = builder.Configuration.GetConnectionString("PostgreSql");
@@ -66,35 +69,17 @@ builder.Services.AddSingleton<server.Services.IJwtService>(sp =>
     return new server.Services.JwtService(jwtKey, jwtIssuer, jwtAudience);
 });
 
-builder.Services.AddSingleton<server.Services.IRegistrationService>(sp =>
-{
-    var configuration = sp.GetRequiredService<IConfiguration>();
-    var connectionString = configuration.GetConnectionString("PostgreSql");
+// Clean Architecture Layers
+builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddApplication();
 
-    if (string.IsNullOrWhiteSpace(connectionString))
-    {
-        throw new InvalidOperationException("Connection string 'PostgreSql' is missing.");
-    }
 
-    return new server.Services.InMemoryRegistrationService(connectionString);
-});
-
-builder.Services.AddSingleton<server.Services.ITransportService>(sp =>
-{
-    var configuration = sp.GetRequiredService<IConfiguration>();
-    var connectionString = configuration.GetConnectionString("PostgreSql");
-
-    if (string.IsNullOrWhiteSpace(connectionString))
-    {
-        throw new InvalidOperationException("Connection string 'PostgreSql' is missing.");
-    }
-
-    return new server.Services.TransportService(connectionString);
-});
 
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+app.UseMiddleware<GlobalExceptionMiddleware>();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();

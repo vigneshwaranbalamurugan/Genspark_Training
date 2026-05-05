@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using server.Application.Services.Interfaces;
 using server.Models;
-using server.Services;
 
 namespace server.Controllers;
 
@@ -8,21 +8,21 @@ namespace server.Controllers;
 [Route("api/public")]
 public sealed class PublicTransportController : ControllerBase
 {
-    private readonly ITransportService transportService;
+    private readonly ITripService _tripService;
 
-    public PublicTransportController(ITransportService transportService)
+    public PublicTransportController(ITripService tripService)
     {
-        this.transportService = transportService;
+        _tripService = tripService;
     }
 
     [HttpGet("buses/search")]
-    public ActionResult<TripSearchResponse> Search(
+    public async Task<ActionResult<TripSearchResponse>> Search(
         [FromQuery] string source,
         [FromQuery] string destination,
         [FromQuery] DateOnly date,
         [FromQuery] DateOnly? returnDate)
     {
-        var response = transportService.SearchTrips(new TripSearchRequest
+        var response = await _tripService.SearchTripsAsync(new TripSearchRequest
         {
             Source = source,
             Destination = destination,
@@ -34,39 +34,25 @@ public sealed class PublicTransportController : ControllerBase
     }
 
     [HttpGet("trips/{tripId:guid}/seats")]
-    public ActionResult<SeatAvailabilityResponse> Seats([FromRoute] Guid tripId, [FromQuery] DateOnly travelDate)
+    public async Task<ActionResult<SeatAvailabilityResponse>> Seats([FromRoute] Guid tripId, [FromQuery] DateOnly travelDate)
     {
-        try
-        {
-            return Ok(transportService.GetSeatAvailability(tripId, travelDate));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
+        return Ok(await _tripService.GetSeatAvailabilityAsync(tripId, travelDate));
     }
 
     [HttpGet("buses/search-fuzzy")]
-    public ActionResult<TripSearchResponse> SearchFuzzy(
+    public async Task<ActionResult<TripSearchResponse>> SearchFuzzy(
         [FromQuery] string source,
         [FromQuery] string destination,
         [FromQuery] DateOnly date,
         [FromQuery] DateOnly? returnDate)
     {
-        var response = transportService.SearchTripsFuzzy(source, destination, date, returnDate);
+        var response = await _tripService.SearchTripsFuzzyAsync(source, destination, date, returnDate);
         return Ok(response);
     }
 
     [HttpGet("trips/{tripId:guid}/layout")]
-    public ActionResult<SeatLayoutResponse> GetSeatLayout([FromRoute] Guid tripId, [FromQuery] DateOnly travelDate)
+    public async Task<ActionResult<SeatLayoutResponse>> GetSeatLayout([FromRoute] Guid tripId, [FromQuery] DateOnly travelDate)
     {
-        try
-        {
-            return Ok(transportService.GetSeatLayout(tripId, travelDate));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
+        return Ok(await _tripService.GetSeatLayoutAsync(tripId, travelDate));
     }
 }

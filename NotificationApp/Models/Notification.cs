@@ -4,6 +4,8 @@ namespace NotificationSystem.Models{
     public enum NotiType{
         EmailNotification = 1, SMSNotification =2
     }
+
+    // Base Notification Class
     internal class Notification{
 
         public string Message{set;get;}=string.Empty;

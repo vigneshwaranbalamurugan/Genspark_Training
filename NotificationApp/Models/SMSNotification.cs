@@ -1,4 +1,6 @@
 namespace NotificationSystem.Models{
+
+    // SMS Notification Class ineriting Notification class
     internal class SMSNotification:Notification{
         public SMSNotification(){
             NotificationType=NotiType.SMSNotification;

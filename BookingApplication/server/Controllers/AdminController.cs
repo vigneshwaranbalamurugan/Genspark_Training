@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using server.Application.Services.Interfaces;
 using server.Models;
-using server.Services;
 
 namespace server.Controllers;
 
@@ -10,166 +10,97 @@ namespace server.Controllers;
 [Authorize(Roles = "Admin")]
 public sealed class AdminController : ControllerBase
 {
-    private readonly ITransportService transportService;
-    private readonly IJwtService jwtService;
-    private readonly IConfiguration configuration;
+    private readonly IAdminService _adminService;
+    private readonly IAuthService _authService;
 
-    public AdminController(ITransportService transportService, IJwtService jwtService, IConfiguration configuration)
+    public AdminController(IAdminService adminService, IAuthService authService)
     {
-        this.transportService = transportService;
-        this.jwtService = jwtService;
-        this.configuration = configuration;
+        _adminService = adminService;
+        _authService = authService;
     }
 
     [AllowAnonymous]
     [HttpPost("login")]
-    public ActionResult<AdminLoginResponse> Login([FromBody] AdminLoginRequest request)
+    public async Task<ActionResult<AdminLoginResponse>> Login([FromBody] AdminLoginRequest request)
     {
-        var configuredEmail = configuration["AdminCredentials:Email"] ?? "admin@system.com";
-        var configuredPassword = configuration["AdminCredentials:Password"] ?? "Admin@123";
-
-        var normalizedInputEmail = request.Email.Trim().ToLowerInvariant();
-        var normalizedConfiguredEmail = configuredEmail.Trim().ToLowerInvariant();
-
-        if (!string.Equals(normalizedInputEmail, normalizedConfiguredEmail, StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(request.Password, configuredPassword, StringComparison.Ordinal))
-        {
-            return Unauthorized(new { message = "Invalid admin credentials." });
-        }
-
-        return Ok(new AdminLoginResponse
-        {
-            Email = normalizedConfiguredEmail,
-            JwtToken = jwtService.GenerateToken(normalizedConfiguredEmail, UserRole.Admin.ToString()),
-            Role = UserRole.Admin.ToString(),
-            Message = "Admin login successful"
-        });
+        return Ok(await _authService.LoginAdminAsync(request));
     }
 
     [HttpGet("operators")]
-    public ActionResult<IEnumerable<OperatorResponse>> Operators()
+    public async Task<ActionResult<IEnumerable<OperatorResponse>>> Operators()
     {
-        return Ok(transportService.GetOperators());
+        return Ok(await _adminService.GetOperatorsAsync());
     }
 
     [HttpPost("operators/{operatorId:guid}/approval")]
-    public ActionResult<OperatorResponse> ApproveOperator([FromRoute] Guid operatorId, [FromBody] ApprovalRequest request)
+    public async Task<ActionResult<OperatorResponse>> ApproveOperator([FromRoute] Guid operatorId, [FromBody] ApprovalRequest request)
     {
-        try
-        {
-            return Ok(transportService.ApproveOperator(operatorId, request));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
+        return Ok(await _adminService.ApproveOperatorAsync(operatorId, request));
     }
 
     [HttpPost("operators/{operatorId:guid}/disable")]
-    public ActionResult<OperatorResponse> DisableOperator([FromRoute] Guid operatorId, [FromBody] DisableOperatorRequest request)
+    public async Task<ActionResult<OperatorResponse>> DisableOperator([FromRoute] Guid operatorId, [FromBody] DisableOperatorRequest request)
     {
-        try
-        {
-            return Ok(transportService.DisableOperator(operatorId, request));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
+        return Ok(await _adminService.DisableOperatorAsync(operatorId, request));
     }
 
     [HttpPost("operators/{operatorId:guid}/enable")]
-    public ActionResult<EnableOperatorResponse> EnableOperator([FromRoute] Guid operatorId, [FromBody] EnableOperatorRequest request)
+    public async Task<ActionResult<EnableOperatorResponse>> EnableOperator([FromRoute] Guid operatorId, [FromBody] EnableOperatorRequest request)
     {
-        try
-        {
-            return Ok(transportService.EnableOperator(operatorId, request));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
+        return Ok(await _adminService.EnableOperatorAsync(operatorId, request));
     }
     
     [HttpPost("routes")]
-    public ActionResult<RouteResponse> AddRoute([FromBody] RouteRequest request)
+    public async Task<ActionResult<RouteResponse>> AddRoute([FromBody] RouteRequest request)
     {
-        try
-        {
-            return Ok(transportService.CreateRoute(request));
-        }
-        catch (InvalidOperationException exception)
-        {
-            return Conflict(new { message = exception.Message });
-        }
+        return Ok(await _adminService.CreateRouteAsync(request));
     }
 
     [HttpGet("routes")]
-    public ActionResult<IEnumerable<RouteResponse>> Routes()
+    public async Task<ActionResult<IEnumerable<RouteResponse>>> Routes()
     {
-        return Ok(transportService.GetRoutes());
+        return Ok(await _adminService.GetRoutesAsync());
     }
 
     [HttpGet("buses")]
-    public ActionResult<IEnumerable<BusResponse>> GetBuses()
+    public async Task<ActionResult<IEnumerable<BusResponse>>> GetBuses()
     {
-        return Ok(transportService.GetAllBuses());
+        return Ok(await _adminService.GetAllBusesAsync());
     }
 
     [HttpPost("buses/{busId:guid}/approval")]
-    public ActionResult<BusResponse> ApproveBus([FromRoute] Guid busId, [FromBody] ApprovalRequest request)
+    public async Task<ActionResult<BusResponse>> ApproveBus([FromRoute] Guid busId, [FromBody] ApprovalRequest request)
     {
-        try
-        {
-            return Ok(transportService.ApproveBus(busId, request));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
+        return Ok(await _adminService.ApproveBusAsync(busId, request));
     }
 
     [HttpPost("buses/{busId:guid}/disable")]
-    public ActionResult<BusResponse> DisableBus([FromRoute] Guid busId, [FromBody] DisableBusRequest request)
+    public async Task<ActionResult<BusResponse>> DisableBus([FromRoute] Guid busId, [FromBody] DisableBusRequest request)
     {
-        try
-        {
-            return Ok(transportService.DisableBus(busId, request));
-        }
-        catch (KeyNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
-        }
+        return Ok(await _adminService.DisableBusAsync(busId, request));
     }
 
     [HttpGet("notifications/{recipientEmail}")]
-    public ActionResult<IEnumerable<NotificationResponse>> Notifications([FromRoute] string recipientEmail)
+    public async Task<ActionResult<IEnumerable<NotificationResponse>>> Notifications([FromRoute] string recipientEmail)
     {
-        return Ok(transportService.GetNotifications(recipientEmail));
+        return Ok(await _adminService.GetNotificationsAsync(recipientEmail));
     }
 
     [HttpPost("platform-fee")]
-    public ActionResult<PlatformFeeResponse> SetPlatformFee([FromBody] PlatformFeeRequest request)
+    public async Task<ActionResult<PlatformFeeResponse>> SetPlatformFee([FromBody] PlatformFeeRequest request)
     {
-        try
-        {
-            return Ok(transportService.SetPlatformFee(request));
-        }
-        catch (InvalidOperationException exception)
-        {
-            return BadRequest(new { message = exception.Message });
-        }
+        return Ok(await _adminService.SetPlatformFeeAsync(request));
     }
 
     [HttpGet("platform-fee")]
-    public ActionResult<PlatformFeeResponse> GetPlatformFee()
+    public async Task<ActionResult<PlatformFeeResponse>> GetPlatformFee()
     {
-        return Ok(transportService.GetCurrentPlatformFee());
+        return Ok(await _adminService.GetCurrentPlatformFeeAsync());
     }
 
     [HttpGet("revenue")]
-    public ActionResult<AdminRevenueResponse> GetRevenue()
+    public async Task<ActionResult<AdminRevenueResponse>> GetRevenue()
     {
-        return Ok(transportService.GetAdminRevenue());
+        return Ok(await _adminService.GetAdminRevenueAsync());
     }
 }

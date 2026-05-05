@@ -1,5 +1,7 @@
 ﻿using UnderstandingOOPSApp.Interfaces;
 using UnderstandingOOPSApp.Services;
+using UnderstandingOOPSApp.Repositories;
+using UnderstandingOOPSApp.Models;
 
 namespace UnderstandingOOPSApp
 {
@@ -43,7 +45,22 @@ namespace UnderstandingOOPSApp
         }
         static void Main(string[] args)
         {
-            new Program().DoBanking();
+            // new Program().DoBanking();
+
+            // AccountRepository accountRepository = new AccountRepository();
+            // var account = new Account("", "Vigneshwaran", new DateTime(), "vigneshwaran@gmail.com", "9876543210", 10000);
+            // account = accountRepository.Create(account);
+            // Console.WriteLine(account);
+            // accountRepository[account.AccountNumber] = new Account();
+            // Console.WriteLine(accountRepository[account.AccountNumber]);
+
+            //Operator Overloading example
+            Account account1 = new Account("9990001001", "Vigneshwaran", new DateTime(), "vignesh@gmail.com", "9876543210", 10000);
+            Account account2 = new Account("9990001001", "Vigneshwaran", new DateTime(), "vigi@gmail.com", "9876543210", 20000);
+            if(account1.Equals(account2))
+                Console.WriteLine("Both accounts are same");
+            else
+                Console.WriteLine("Both accounts are different");
         }
     }
 }

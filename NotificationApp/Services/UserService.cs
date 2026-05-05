@@ -1,15 +1,21 @@
 using NotificationSystem.Models;
 using NotificationSystem.Interfaces;
+using NotificationSystem.Services;
+using NotificationSystem.Repositories;
 
 namespace NotificationSystem.Services{
+    // User Service implementing IUserInteract interface
     internal class UserService:IUserInteract{
-        List<User> users = new List<User>();
-        static int lastUserId=100;
+
+        public UserRepository userRepository;
+
+        public UserService(){
+            userRepository=new UserRepository();
+        }
 
         public User CreateUser(){
             User user = GetInputUserDetails();
-            user.UserId=(++lastUserId);
-            users.Add(user);
+            userRepository.Create(user);
             return user;
         }
 
@@ -25,19 +31,34 @@ namespace NotificationSystem.Services{
         }
 
         public User getUserByEmail(string emailId){
-            User user = users.FirstOrDefault(u=>u.EmailId==emailId);
-            if(user!=null){
-                return user;
-            }
-            return null;
+            return userRepository.GetByEmail(emailId);
         }
 
         public User getUserByMobileNumber(string mobileNumber){
-            User user = users.FirstOrDefault(u=>u.MobileNumber==mobileNumber);
-            if(user!=null){
-                return user;
-            }
-            return null;
+            return userRepository.GetByMobileNumber(mobileNumber);
         }
+
+        public User UpdateUser(string mobileNumber){
+             User oldUser=getUserByMobileNumber(mobileNumber);
+             if(oldUser==null){
+                return null;
+             }
+             User user = GetInputUserDetails();
+             user.UserId=oldUser.UserId;
+             return userRepository.Update(user.UserId,user);
+        }
+
+        public User DeleteUser(string mobileNumber){
+            User user = getUserByMobileNumber(mobileNumber);
+            if(user==null){
+                return null;
+            }
+            return userRepository.Delete(user.UserId);
+        }
+
+        public User GetUserById(int id){
+            return userRepository.Get(id);
+        }
+
     }
 }

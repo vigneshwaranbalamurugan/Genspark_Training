@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using server.Application.Services.Interfaces;
 using server.Models;
-using server.Services;
 
 namespace server.Controllers;
 
@@ -8,23 +8,23 @@ namespace server.Controllers;
 [Route("api/profile")]
 public sealed class ProfileController : ControllerBase
 {
-    private readonly ITransportService transportService;
+    private readonly IUserProfileService _userProfileService;
 
-    public ProfileController(ITransportService transportService)
+    public ProfileController(IUserProfileService userProfileService)
     {
-        this.transportService = transportService;
+        _userProfileService = userProfileService;
     }
 
     [HttpPost]
-    public ActionResult<UserProfileResponse> Upsert([FromBody] UserProfileRequest request)
+    public async Task<ActionResult<UserProfileResponse>> Upsert([FromBody] UserProfileRequest request)
     {
-        return Ok(transportService.UpsertUserProfile(request));
+        return Ok(await _userProfileService.UpsertUserProfileAsync(request));
     }
 
     [HttpGet("{email}")]
-    public ActionResult<UserProfileResponse> Get([FromRoute] string email)
+    public async Task<ActionResult<UserProfileResponse>> Get([FromRoute] string email)
     {
-        var profile = transportService.GetUserProfile(email);
+        var profile = await _userProfileService.GetUserProfileAsync(email);
         if (profile is null)
         {
             return NotFound(new { message = "Profile not found." });
