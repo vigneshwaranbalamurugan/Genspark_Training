@@ -1,42 +1,22 @@
+using NotificationApp.DALLibrary.Context;
 using NotificationApp.DALLibrary.Interfaces;
 
 namespace NotificationApp.DALLibrary.Repositories{
-    // Generic Abstract Repository implementing IRepository interface
-    public abstract class AbstractRepository<K,T>:IRepository<K,T> where T:class{
-        protected Dictionary<K,T> _items;
+    public abstract class AbstractRepository<K,T>: IRepository<K,T> where T : class{
+        protected readonly  DbConnection _connection;
+
+        protected AbstractRepository(DbConnection connection){
+            _connection = connection;
+        }
 
         public abstract T Create(T item);
 
-        public T? Get(K key){
-            if(_items.ContainsKey(key)){
-                return _items[key];
-            }
-            return null;
-        }
+        public abstract T? Get(K key);
 
-        public List<T>? GetAll(){
-            if(_items.Count==0){
-                return null;
-            }
-            return _items.Values.ToList();
-        }
+        public abstract List<T>? GetAll();
 
-        public T? Update(K key,T item){
-            if(_items.ContainsKey(key)){
-                _items[key]=item;
-                return item;
-            }
-            return null;
-        }
+        public abstract T? Update(K key, T item);
 
-        public T? Delete(K key){
-            if(_items.ContainsKey(key)){
-                T item=_items[key];
-                _items.Remove(key);
-                return item;
-            }
-            return null;
-        }
-
+        public abstract T? Delete(K key);
     }
 }

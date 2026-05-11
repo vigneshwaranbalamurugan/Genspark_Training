@@ -2,7 +2,7 @@
 using NotificationApp.BALLibrary.Interfaces;
 using NotificationApp.BALLibrary.Services;
 using NotificationApp.DALLibrary.Repositories;
-
+using NotificationApp.DALLibrary.Context;
 
 namespace NotificationApp.FEApplication{
     internal class Program{
@@ -13,9 +13,12 @@ namespace NotificationApp.FEApplication{
         IUserInteract userInteract;
 
         INotificationService notificationService;
+
+        DbConnection dbConnection;
         public Program(){
-            userRepository = new UserRepository();
-            notificationRepository = new NotificationRepository();
+            dbConnection = new DbConnection();
+            userRepository = new UserRepository(dbConnection);
+            notificationRepository = new NotificationRepository(dbConnection);
             userInteract = new UserService(userRepository);
             userApp = new UserApp(userInteract);
             notificationService = new NotificationService(userInteract, notificationRepository);

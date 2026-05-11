@@ -59,7 +59,7 @@ namespace NotificationApp.BALLibrary.Services{
         }
 
         public Notification? GetById(int id){
-            return notificationRepository.GetById(id);
+            return notificationRepository.Get(id);
         }
 
         // Get All Notifications
