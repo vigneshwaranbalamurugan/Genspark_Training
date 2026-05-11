@@ -60,14 +60,17 @@ namespace NotificationApp.FEApplication
         public void GetAllNotifications()
         {
             List<Notification> notifications = notificationService.GetAllNotifications();
-            if (notifications.Count == 0)
+            if (notifications == null || notifications.Count == 0)
             {
                 Console.WriteLine("No notifications found.");
                 return;
             }
+            Console.WriteLine("{0,-4} {1,-60} {2,-20} {3}", "ID", "Message & Contact", "Sent Date", "Type");
+            Console.WriteLine(new string('-', 100));
             foreach (var notification in notifications)
             {
-                Console.WriteLine(notification);
+                var message = notification.Message ?? string.Empty;
+                Console.WriteLine("{0,-4} {1,-60} {2,-20} {3}", notification.Id, message, notification.SentDate.ToString("yyyy-MM-dd HH:mm"), notification.NotificationType);
             }
         }
     }

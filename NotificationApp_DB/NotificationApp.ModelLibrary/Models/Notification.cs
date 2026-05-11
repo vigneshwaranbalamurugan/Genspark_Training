@@ -21,7 +21,7 @@ namespace NotificationApp.ModelLibrary.Models{
         }
 
         public override string ToString(){
-            return $"Notification Id: {Id}, Message: {Message}, User to Notify: {UsertoNotify}, Sent Date: {SentDate}, Notification Type: {NotificationType}";
+            return $"Notification Id: {Id}, Message: {Message}, UserId to Notify: {UsertoNotify}, Sent Date: {SentDate}, Notification Type: {NotificationType}";
         }
     }
 }

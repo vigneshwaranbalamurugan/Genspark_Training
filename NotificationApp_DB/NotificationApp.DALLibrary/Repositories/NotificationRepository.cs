@@ -52,9 +52,14 @@ namespace NotificationApp.DALLibrary.Repositories
                     var n = new Notification();
                     n.Id = Convert.ToInt32(reader[0]);
                     n.UsertoNotify = Convert.ToInt32(reader[1]);
-                    n.Message = reader[2].ToString()!;
+                    var rawMessage = reader[2].ToString()!;
                     n.SentDate = Convert.ToDateTime(reader[3]);
                     n.NotificationType = (NotiType)Convert.ToInt32(reader[4]);
+                    var email = reader.IsDBNull(5) ? string.Empty : reader[5].ToString()!;
+                    var mobile = reader.IsDBNull(6) ? string.Empty : reader[6].ToString()!;
+                    var contact = n.NotificationType == NotiType.EmailNotification ? email : mobile;
+                    // Keep model unchanged — embed contact for display in Message
+                    n.Message = $"{rawMessage}, (User to Notify: {contact})";
                     notifications.Add(n);
                 }
                 return notifications;
@@ -82,9 +87,13 @@ namespace NotificationApp.DALLibrary.Repositories
                     var n = new Notification();
                     n.Id = Convert.ToInt32(reader[0]);
                     n.UsertoNotify = Convert.ToInt32(reader[1]);
-                    n.Message = reader[2].ToString()!;
+                    var rawMessage = reader[2].ToString()!;
                     n.SentDate = Convert.ToDateTime(reader[3]);
                     n.NotificationType = (NotiType)Convert.ToInt32(reader[4]);
+                    var email = reader.IsDBNull(5) ? string.Empty : reader[5].ToString()!;
+                    var mobile = reader.IsDBNull(6) ? string.Empty : reader[6].ToString()!;
+                    var contact = n.NotificationType == NotiType.EmailNotification ? email : mobile;
+                    n.Message = $"{rawMessage}, (User to Notify: {contact})";
                     return n;
                 }
             }
