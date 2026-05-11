@@ -227,6 +227,28 @@ public sealed class TripRepository : ITripRepository
         return await ReadTripDetailsAsync(command);
     }
 
+    public async Task<TripDetail?> GetByIdWithDetailsAsync(Guid tripId)
+    {
+        await using var connection = await _factory.CreateConnectionAsync();
+        await using var command = new NpgsqlCommand(@"
+            SELECT t.id, t.operator_id, t.bus_id, t.route_id, t.departure_time, t.arrival_time,
+                   t.base_price, t.platform_fee, t.is_variable_price, t.pickup_points, t.drop_points,
+                   t.trip_type, t.days_of_week, t.is_active, t.arrival_day_offset,
+                   t.start_date, t.end_date, t.departure_time_only, t.arrival_time_only,
+                   b.bus_name, b.bus_number, b.capacity, b.layout_name, b.layout_json,
+                   r.source, r.destination, o.company_name
+            FROM trips t
+            JOIN buses b ON b.id = t.bus_id
+            JOIN routes r ON r.id = t.route_id
+            JOIN operators o ON o.id = t.operator_id
+            WHERE t.id = @id;", connection);
+
+        command.Parameters.AddWithValue("id", tripId);
+
+        var details = await ReadTripDetailsAsync(command);
+        return details.FirstOrDefault();
+    }
+
     private static async Task<List<TripDetail>> ReadTripDetailsAsync(NpgsqlCommand command)
     {
         await using var reader = await command.ExecuteReaderAsync();

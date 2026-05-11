@@ -25,4 +25,9 @@ public interface ITripRepository
     /// Find trips matching fuzzy source/destination and date (supports OneTime and Daily).
     /// </summary>
     Task<IEnumerable<TripDetail>> SearchFuzzyAsync(string source, string destination, DateOnly date);
+
+    /// <summary>
+    /// Get trip details by tripId including bus, route, and operator information.
+    /// </summary>
+    Task<TripDetail?> GetByIdWithDetailsAsync(Guid tripId);
 }

@@ -340,7 +340,39 @@ public sealed class OperatorService : IOperatorService
     public async Task<List<PreferredRouteResponse>> GetOperatorPreferredRoutesAsync(Guid operatorId)
     {
         var routes = await _routeRepo.GetPreferredRoutesAsync(operatorId);
-        return routes.Select(r => new PreferredRouteResponse { RouteId = r.Id, Source = r.Source, Destination = r.Destination }).ToList();
+
+        var routeResponses = new List<PreferredRouteResponse>();
+        foreach (var route in routes)
+        {
+            var pickupTask = _routeRepo.GetPointsAsync(operatorId, route.Id, true);
+            var dropTask = _routeRepo.GetPointsAsync(operatorId, route.Id, false);
+            await Task.WhenAll(pickupTask, dropTask);
+
+            routeResponses.Add(new PreferredRouteResponse
+            {
+                RouteId = route.Id,
+                Source = route.Source,
+                Destination = route.Destination,
+                PickupPoints = pickupTask.Result.Select(p => new PickupDropPointResponse
+                {
+                    PointId = p.Id,
+                    Location = p.Location,
+                    Address = p.Address,
+                    IsDefault = p.IsDefault,
+                    IsPickup = true
+                }).ToList(),
+                DropPoints = dropTask.Result.Select(p => new PickupDropPointResponse
+                {
+                    PointId = p.Id,
+                    Location = p.Location,
+                    Address = p.Address,
+                    IsDefault = p.IsDefault,
+                    IsPickup = false
+                }).ToList()
+            });
+        }
+
+        return routeResponses;
     }
 
     public async Task<PickupDropPointResponse> AddPickupDropPointAsync(Guid operatorId, Guid routeId, bool isPickup, PickupDropPointRequest request)

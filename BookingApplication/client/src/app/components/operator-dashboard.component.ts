@@ -159,17 +159,7 @@ export class OperatorDashboardComponent implements OnInit {
       error: (err) => this.errorMessage.set(err.message)
     });
 
-    this.operatorService.getPreferredRoutes(this.operatorId).subscribe({
-      next: (data) => {
-        console.log('Preferred Routes loaded:', data);
-        this.preferredRoutes.set(data || []);
-        if (data?.length && !this.tripForm.routeId) {
-          this.tripForm.routeId = data[0].routeId;
-          this.onTripRouteSelected();
-        }
-      },
-      error: (err) => this.errorMessage.set(err.message)
-    });
+    this.loadPreferredRoutes();
 
     this.operatorService.getRevenue(this.operatorId).subscribe({
       next: (data) => this.revenue.set(data),
@@ -184,6 +174,25 @@ export class OperatorDashboardComponent implements OnInit {
     this.operatorService.getTrips(this.operatorId).subscribe({
       next: (data) => this.trips.set(data || []),
       error: (err) => console.error("Could not load trips", err)
+    });
+  }
+
+  private loadPreferredRoutes(): void {
+    this.operatorService.getPreferredRoutes(this.operatorId).subscribe({
+      next: (data) => {
+        const routes = data || [];
+        this.preferredRoutes.set(routes);
+
+        if (routes.length && !this.tripForm.routeId) {
+          this.tripForm.routeId = routes[0].routeId;
+          this.onTripRouteSelected();
+        }
+
+        if (this.routeForm.routeId) {
+          this.onRouteSelectedForPoints();
+        }
+      },
+      error: (err) => this.errorMessage.set(err.message)
     });
   }
 
@@ -288,16 +297,8 @@ export class OperatorDashboardComponent implements OnInit {
       next: () => {
         this.operatorService.addDropPoint(this.operatorId, this.routeForm.routeId, this.routeForm.dropPoint, this.routeForm.dropAddress).subscribe({
           next: () => {
-            console.log('Pickup and drop points successfully updated');
-            this.operatorService.getPreferredRoutes(this.operatorId).subscribe({
-              next: (data) => {
-                this.preferredRoutes.set(data || []);
-                this.successMessage.set('Pickup and drop points updated successfully.');
-                setTimeout(() => {
-                  this.onRouteSelectedForPoints();
-                }, 500);
-              }
-            });
+            this.loadPreferredRoutes();
+            this.successMessage.set('Pickup and drop points updated successfully.');
           },
           error: (err) => this.errorMessage.set(err.message)
         });
