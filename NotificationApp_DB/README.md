@@ -5,181 +5,148 @@
 - Multi-layered C# console application for managing users and sending notifications
 - Supports email and SMS notification types
 - Input validation and exception handling throughout the application
+# Notification Application
 
-## Architecture
+A layered C# console application for user management and notification delivery (SMS and Email), backed by PostgreSQL.
 
-### Layers
+## Tech Stack
 
-- **FE Application Layer (NotificationApp.FEApplication)**
-  - Console-based user interface
-  - Menu-driven interaction
-  - Input validation and user prompts
-  
-- **BAL - Business Logic Layer (NotificationApp.BALLibrary)**
-  - Service classes for business operations
-  - User management service
-  - Notification creation and sending service
-  - Notification sender implementations
-  
-- **DAL - Data Access Layer (NotificationApp.DALLibrary)**
-  - Repository pattern implementation
-  - Generic repository interface
-  - User and notification repositories
-  - In-memory data storage
-  
-- **Model Library (NotificationApp.ModelLibrary)**
-  - Domain models
-  - Custom exceptions
-  - Data structures
+- .NET 10 console application
+- PostgreSQL
+- Npgsql
+- Layered architecture (FE, BAL, DAL, Model)
 
-## Project Structure
+## Solution Structure
 
-```
-NotificationApp/
-├── NotificationApp.FEApplication/
-│   ├── Program.cs (Main entry point)
-│   ├── Notification/
-│   │   └── NotificationApp.cs (Notification menu handler)
-│   ├── User/
-│   │   └── UserApp.cs (User menu handler)
-│   └── Validators/
-│       ├── EmailValidator.cs
-│       ├── MessageValidator.cs
-│       ├── MobileNumberValidator.cs
-│       └── NameValidator.cs
-│
-├── NotificationApp.BALLibrary/
-│   ├── Interfaces/
-│   │   ├── INotificationSender.cs
-│   │   └── IUserInteract.cs
-│   └── Services/
-│       ├── Notification/
-│       │   ├── EmailNotificationService.cs
-│       │   ├── NotificationService.cs
-│       │   └── SMSNotificationService.cs
-│       └── Users/
-│           └── UserService.cs
-│
-├── NotificationApp.DALLibrary/
-│   ├── Interfaces/
-│   │   └── IRepository.cs (Generic repository interface)
-│   └── Repositories/
-│       ├── AbstractRepository.cs (Base repository class)
-│       ├── NotificationRepository.cs
-│       └── UserRepository.cs
-│
-└── NotificationApp.ModelLibrary/
-    ├── Models/
-    │   ├── User.cs
-    │   ├── Notification.cs
-    │   ├── EmailNotification.cs
-    │   └── SMSNotification.cs
-    └── Exceptions/
-        ├── InvalidEmailIdException.cs
-        ├── InvalidMobileNumberException.cs
-        ├── InvalidNameException.cs
-        └── MessageException.cs
-```
+- NotificationApp.FEApplication
+  - Console menus and input flow
+  - Validation classes for name, email, mobile number, and message
+- NotificationApp.BALLibrary
+  - Business services for users and notifications
+  - Notification sender strategy implementations (SMS and Email)
+- NotificationApp.DALLibrary
+  - Repository implementations using SQL queries and Npgsql
+  - Database connection wrapper
+- NotificationApp.ModelLibrary
+  - Domain models and custom validation exceptions
 
-## Key Features
+## Current Features
 
-### User Management
-- Create new users with name, email, and mobile number
-- Retrieve users by email or mobile number
-- Update user information
-- Delete users
-- View user details
+### User Features
 
-### Notification Management
-- Create notifications with message content
-- Send SMS notifications to users by mobile number
-- Send email notifications to users by email address
-- View all notifications
-- Retrieve notification by ID
-- Track notification sending date and time
+- Create a user (name, email, mobile number)
+- Get user details by mobile number
+- Update user details by mobile number
+- Delete user by mobile number
 
-### Data Validation
-- Email format validation using regex
-- Mobile number validation
-- User name validation
-- Message content validation
-- Custom exception handling for validation failures
+### Notification Features
 
-### Notification Types
-- Email notifications via EmailNotificationService
-- SMS notifications via SMSNotificationService
-- Polymorphic implementation using INotificationSender interface
+- Send SMS notification to an existing user (by mobile number)
+- Send Email notification to an existing user (by email)
+- Get all notifications
+- Get SMS notifications only
+- Get Email notifications only
 
-## Core Classes and Interfaces
+Note: If a recipient user is not found, notification creation is skipped with a message to create the user first.
 
-### Models
-- `User` - Represents a user with ID, name, mobile number, email
-- `Notification` - Base notification class with type, message, sent date
-- `EmailNotification` - Extends Notification for email messages
-- `SMSNotification` - Extends Notification for SMS messages
+## Menus
 
-### Services
-- `NotificationService` - Handles notification creation and sending logic
-- `UserService` - Implements IUserInteract for user operations
-- `EmailNotificationSender` - Sends email notifications
-- `SMSNotificationSender` - Sends SMS notifications
+### Main Menu
 
-### Repositories
-- `UserRepository` - Manages user data persistence
-- `NotificationRepository` - Manages notification data persistence
-- `AbstractRepository<K,T>` - Generic base repository with CRUD operations
-
-### Interfaces
-- `IUserInteract` - Contract for user operations
-- `INotificationSender` - Contract for notification delivery
-- `INotificationService` - Contract for notification services
-- `IRepository<K,T>` - Generic repository contract
-
-## Application Flow
+1. User Menu
+2. Notification Menu
+3. Exit
 
 ### User Menu
-- Create new user
-- View user by email
-- View user by mobile number
-- Update user information
-- Delete user
-- Return to main menu
+
+1. Get User Details
+2. Create User
+3. Update User Details
+4. Delete User
+5. Back
 
 ### Notification Menu
-- Send SMS notification
-- Send email notification
-- View all notifications
-- View notification by ID
-- Return to main menu
 
-## Exception Handling
+1. Send Notification
+2. Get All Notifications
+3. Get SMS Notifications
+4. Get Email Notifications
+5. Back
 
-- InvalidEmailIdException - Invalid email format
-- InvalidMobileNumberException - Invalid phone number
-- InvalidNameException - Invalid user name
-- MessageException - Invalid message content
-- Custom exception messages for user guidance
+## LINQ Usage
 
-## Running the Application
+The notification filtering feature uses LINQ in FE layer:
 
-- Requires .NET 10.0 runtime
-- Build: dotnet build
-- Run: dotnet run --project NotificationApp.FEApplication
-- Console-based interactive menu system
+- Where to filter by notification type (SMS or Email)
+- OrderByDescending to show recent notifications first
+- ToList to materialize filtered results
 
-## Input Flow
+## Validation Rules
 
-- User selects menu option
-- Input validation through dedicated validators
-- Exception handling with user-friendly error messages
-- Retry on validation failure
-- Operation confirmation and feedback
+- Email
+  - Cannot be empty
+  - Must match a valid email format
+- Mobile number
+  - Cannot be empty
+  - Must contain only digits
+  - Must be exactly 10 digits
+- Name
+  - Cannot be empty
+  - Must contain only letters and spaces
+  - Minimum length is 3
+- Message
+  - Cannot be empty or whitespace
+  - Length must be between 5 and 160 characters
 
-## Design Patterns Used
+## Data Access and Persistence
 
-- Repository pattern for data access
-- Strategy pattern for notification sending
-- Factory pattern concept in service initialization
-- Generic programming for repository implementation
-- Interface segregation for loose coupling
-- Dependency injection through constructor parameters
+- Uses PostgreSQL tables:
+  - users
+  - notifications
+- Notification read queries join notifications with users to include recipient contact details.
+- Repository pattern is used for CRUD operations.
+
+## Domain Models
+
+- User
+  - UserId, UserName, MobileNumber, EmailId
+- Notification
+  - Id, Message, UsertoNotify, SentDate, NotificationType
+- EmailNotification (inherits Notification)
+- SMSNotification (inherits Notification)
+- NotiType enum
+  - EmailNotification = 1
+  - SMSNotification = 2
+
+## Exception Types
+
+- InvalidEmailIdException
+- InvalidMobileNumberException (class name)
+- InvalidNameException
+- MessageException
+
+## Run Instructions
+
+From solution root:
+
+1. Restore and build
+   - dotnet build NotificationApp.sln
+2. Run FE app
+   - dotnet run --project NotificationApp.FEApplication
+
+## Database Configuration
+
+The current connection string is defined in DAL DbConnection and points to localhost PostgreSQL.
+
+Update credentials/database before running in your environment:
+
+- Host
+- Port
+- Username
+- Password
+- Database
+
+## Notes
+
+- Notification sender services currently print to console (simulation of delivery).
+- Build is successful; there are nullable reference warnings in BAL and DAL that do not block execution.

@@ -3,6 +3,7 @@ using NotificationApp.BALLibrary.Interfaces;
 using NotificationApp.BALLibrary.Services;
 using NotificationApp.DALLibrary.Repositories;
 using NotificationApp.DALLibrary.Context;
+using NotificationApp.ModelLibrary.Models;
 
 namespace NotificationApp.FEApplication{
     internal class Program{
@@ -105,8 +106,8 @@ namespace NotificationApp.FEApplication{
 
         private void NotificationMenu(){
             int choice = 0;
-            while(choice!=3){
-                Console.WriteLine("Select Notification action:\n1. Send Notification \n2. Get All Notifications\n3. Back");
+            while(choice!=5){
+                Console.WriteLine("Select Notification action:\n1. Send Notification\n2. Get All Notifications\n3. Get SMS Notifications\n4. Get Email Notifications\n5. Back");
                 
                 while(true){
                     try{
@@ -114,11 +115,11 @@ namespace NotificationApp.FEApplication{
                         break;
                     }catch(FormatException){
                         Console.WriteLine("Invalid input. Please enter a number.");
-                        Console.WriteLine("\n1. Send Notification \n2. Get All Notifications\n3. Back");
+                        Console.WriteLine("\n1. Send Notification\n2. Get All Notifications\n3. Get SMS Notifications\n4. Get Email Notifications\n5. Back");
                         continue;
                     }catch(Exception ex){
                         Console.WriteLine($"An error occurred: {ex.Message}");
-                        Console.WriteLine("\n1. Send Notification \n2. Get All Notifications\n3. Back");
+                        Console.WriteLine("\n1. Send Notification\n2. Get All Notifications\n3. Get SMS Notifications\n4. Get Email Notifications\n5. Back");
                         continue;
                     }
                 }
@@ -130,6 +131,12 @@ namespace NotificationApp.FEApplication{
                         notificationApp.GetAllNotifications();
                         break;
                     case 3:
+                        notificationApp.GetNotificationsByType(NotiType.SMSNotification);
+                        break;
+                    case 4:
+                        notificationApp.GetNotificationsByType(NotiType.EmailNotification);
+                        break;
+                    case 5:
                         break;
                     default:
                         Console.WriteLine("Invalid choice. Please try again.");

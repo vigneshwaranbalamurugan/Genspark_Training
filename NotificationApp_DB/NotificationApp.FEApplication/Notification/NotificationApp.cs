@@ -1,6 +1,7 @@
 using NotificationApp.BALLibrary.Interfaces;
 using NotificationApp.ModelLibrary.Models;
 using NotificationApp.FEApplication.Validators;
+using System.Linq;
 
 namespace NotificationApp.FEApplication
 {
@@ -60,6 +61,22 @@ namespace NotificationApp.FEApplication
         public void GetAllNotifications()
         {
             List<Notification> notifications = notificationService.GetAllNotifications();
+            DisplayNotifications(notifications);
+        }
+
+        public void GetNotificationsByType(NotiType type)
+        {
+            List<Notification> notifications = notificationService.GetAllNotifications();
+            List<Notification>? filteredNotifications = notifications?
+                .Where(notification => notification.NotificationType == type)
+                .OrderByDescending(notification => notification.SentDate)
+                .ToList();
+
+            DisplayNotifications(filteredNotifications);
+        }
+
+        private void DisplayNotifications(List<Notification>? notifications)
+        {
             if (notifications == null || notifications.Count == 0)
             {
                 Console.WriteLine("No notifications found.");
