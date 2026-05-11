@@ -8,30 +8,140 @@ namespace UnderstandingADOApp
     {
         string connectionString =
             "Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=978681";
-
+        NpgsqlConnection connection;
         public Program()
         {
-            NpgsqlConnection connection = new NpgsqlConnection(connectionString);
+          connection = new NpgsqlConnection(connectionString);
+           
+        }
+        void GetProductDataFromDatabase()
+        {
+            string selectQuery = "Select * from Products";
+            NpgsqlCommand command = new NpgsqlCommand(selectQuery, connection);
             try
             {
                 connection.Open();
-                Console.WriteLine("Connected to PostgreSQL successfully!");
-
+                NpgsqlDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    Console.WriteLine("Product Id : " + reader[0].ToString());
+                    Console.WriteLine("Product Name : " + reader[1].ToString());
+                }
+                Console.WriteLine("Done reading");
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Error: " + ex.Message);
+                Console.WriteLine(ex.Message);
             }
             finally
             {
-                connection.Close();
+                connection?.Close();
+            }
+
+        }
+
+        void InsertUserInToDatabase()
+        {
+            User user = GetUserDataFromConsole();
+            string insertCmd = $"Insert into Users(username, password, user_role) values('{user.Username}','{user.Password}','{user.Role}')";
+            NpgsqlCommand command = new NpgsqlCommand(insertCmd, connection);
+            try
+            {
+                connection.Open();
+                int result = command.ExecuteNonQuery();
+                if(result>0)
+                    Console.WriteLine("User created successfully");
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+            }
+            finally
+            {
+                connection?.Close();
             }
         }
+        void UpdateUserToDatabase(User user, string field)
+        {
+            string updateCmd = "";
+            if (field == "password")
+                updateCmd = $"update  Users set user_password = '{user.Password}' where user_id='{user.Username}'";
+            else if (field == "role")
+                updateCmd = $"update  Users set user_role = '{user.Role}' where user_id='{user.Username}'";
+            else
+                throw new Exception("Invalid column to update");
+
+            NpgsqlCommand command = new NpgsqlCommand(updateCmd, connection);
+            try
+            {
+                connection.Open();
+                int result = command.ExecuteNonQuery();
+                if (result > 0)
+                    Console.WriteLine("User details updated");
+                else
+                    Console.WriteLine("No such user");
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+            }
+            finally
+            {
+                connection?.Close();
+            }
+        }
+        void InitiateUserDataUpdate()
+        {
+            Console.WriteLine("Please enter the user id you want to update");
+            User user = new User();
+            user.Username = Console.ReadLine() ?? "";
+            Console.WriteLine("Please enter the field you want to update Password/Role");
+            
+            string option = Console.ReadLine()??"".ToLower();
+            if(option =="role")
+            {
+                Console.WriteLine("Please enter the new value for role");
+                user.Role = Console.ReadLine() ?? "";
+            }
+            else if(option == "password")
+            {
+                Console.WriteLine("Please enter the new value for password");
+                user.Password = Console.ReadLine() ?? "";
+            }
+            try
+            {
+                UpdateUserToDatabase(user, option);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+            }
+
+        }
+        private User GetUserDataFromConsole()
+        {
+            User user = new User();
+            Console.WriteLine("Please eneter your preffered username");
+            user.Username = Console.ReadLine()??"";
+            Console.WriteLine("Please eneter teh password");
+            user.Password = Console.ReadLine()??"";
+            Console.WriteLine("Please eneter your role");
+            user.Role = Console.ReadLine() ?? "";
+            return user;
+
+        }
+
         static void Main(string[] args)
         {
             Console.WriteLine("Hello, World!");
-            new Program();
+            new Program().InitiateUserDataUpdate();
 
         }
+    }
+    public class User
+    {
+        public string Username { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string Role { get; set; } = string.Empty;
     }
 }

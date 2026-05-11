@@ -1,0 +1,5 @@
+// Need to ignore all bin and obj folders in the project
+
+# Ignore bin and obj folders
+**/bin/
+**/obj/
