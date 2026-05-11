@@ -7,7 +7,7 @@ namespace UnderstandingADOApp
     internal class Program
     {
         string connectionString =
-            "Host=localhost;Port=5432;Database=dummydb;Username=postgres;Password=978681";
+            "Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=978681";
 
         public Program()
         {
