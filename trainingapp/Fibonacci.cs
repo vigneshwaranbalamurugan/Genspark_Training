@@ -4,7 +4,7 @@ namespace FibonacciApp{
             if(num==1 || num ==0){
                 return num;
             }
-            return FibonacciNum(n-1)+FibonacciNum(n-2);
+            return FibonacciNum(num-1)+FibonacciNum(num-2);
         }
     }
 }
