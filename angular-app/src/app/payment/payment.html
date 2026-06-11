@@ -1,0 +1,21 @@
+<div class="payment-container">
+  <h2>Razorpay Payment</h2>
+  
+  <div class="form-group">
+    <label for="razorpayKey">Razorpay Key:</label>
+    <input type="text" id="razorpayKey" [(ngModel)]="razorpayKey" placeholder="Enter Razorpay Key" class="form-control">
+  </div>
+  
+  <div class="form-group">
+    <label for="orderId">Order ID:</label>
+    <input type="text" id="orderId" [(ngModel)]="orderId" placeholder="Enter Order ID" class="form-control">
+  </div>
+  
+  <button (click)="proceedPayment()" class="btn-pay">Pay Now</button>
+
+  <div *ngIf="paymentId" class="payment-success-details">
+    <h3>Payment Details</h3>
+    <p><strong>Payment ID:</strong> {{ paymentId }}</p>
+    <p><strong>Signature:</strong> {{ signature }}</p>
+  </div>
+</div>

@@ -1,0 +1,6 @@
+@Auth0Api_HostAddress = http://localhost:5204
+
+GET {{Auth0Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

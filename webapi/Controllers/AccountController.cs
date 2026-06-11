@@ -1,6 +1,7 @@
-using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using UnderstandingWebAPI.Models;
+
 
 namespace UnderstandingWebAPI.Controllers
 {
@@ -8,28 +9,56 @@ namespace UnderstandingWebAPI.Controllers
     [ApiController]
     public class AccountController : ControllerBase
     {
+        static List<Account> accounts = new List<Account>
+        {
+            new Account{AccountNumber="0009998787",Balance= 100000,OpeninigDate=new DateTime(2026,1,14),Status="Active"},
+            new Account{AccountNumber="0009998789",Balance= 100030,OpeninigDate=new DateTime(2026,2,14),Status = "Active"}
+        };
         [HttpGet]
-        public string Greet()
+        public ActionResult<IEnumerable<Account>> Get()
         {
-            return "Hello World!!";
+            if(accounts.Count == 0)
+                return NotFound("No Accounts in the bank yet");
+            return Ok(accounts);
         }
 
-        [HttpGet("GreetWithName")]
-        public string Greet(string name)
+        [HttpGet("GetAccountByNumebr")]
+        public ActionResult<Account> Get(string accountNumber)
         {
-            return $"Hello {name}!!";
+            if (accounts.Count == 0)
+                return NotFound("No Accounts in the bank yet");
+            var account = accounts.SingleOrDefault(a=>a.AccountNumber == accountNumber);
+            if (account == null)
+                return NotFound("No accont with the given account number");
+            return Ok(account);
         }
+
+        [HttpPost("Transfer")]
+        public ActionResult Transfer(string fromAccountNumber, string toAccountNumber, decimal amount)
+        {
+            var fromAccount = accounts.SingleOrDefault(a => a.AccountNumber == fromAccountNumber);
+            if (fromAccount == null)
+                return NotFound("No accont with the given from account number");
+            var toAccount = accounts.SingleOrDefault(a => a.AccountNumber == toAccountNumber);
+            if (toAccount == null)
+                return NotFound("No accont with the given to account number");
+            if (fromAccount.Balance < amount)
+                return BadRequest("Not enough balance in the from account");
+            fromAccount.Balance -= amount;
+            toAccount.Balance += amount;
+            return Ok("Transfer successful");
+        }
+
+        [HttpGet("GetAcc")]
+
+        
         [HttpPost]
-        public string GreetPost(Account account)
+        public ActionResult<Account> Post([FromBody] Account account)
         {
-            return $"Hello {account.Name}!!";
+            accounts.Add(account);
+            return Created("https://localhost:7280/api/Account/GetAccountByNumebr?accountNumber="+account.AccountNumber, account);
         }
-    }
-    public class Account
-    {
-        [Required]
-        public string Name { get; set; }
-        public string Email { get; set; }
-    }
-}
 
+    }
+    
+}

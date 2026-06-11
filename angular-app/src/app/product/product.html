@@ -1,0 +1,12 @@
+<div class="product-list">
+<div class="product" *ngFor="let product of products; let i = index">
+    <div class="product-image">
+        <img [src]="product.image" alt="{{product.title}}" width="200">
+    </div>
+    <div class="product-details">
+        <h2>{{i + 1}}. {{product.title}}</h2>
+        <p>{{product.description}}</p>
+        <p>Price: {{product.price}}</p>
+    </div>
+</div>
+</div>
