@@ -1,0 +1,10 @@
+services:
+  db:
+    ports:
+      - "5432:5432"     # Expose DB port so DBeaver can connect directly
+                         # Remove this in production for security
+
+
+  pgadmin:
+    environment:
+      PGADMIN_CONFIG_SERVER_MODE: "False"   # Skip login screen in dev
